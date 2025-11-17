@@ -29,11 +29,38 @@ pip install -e ".[dev]"
 # Initialize the factory
 code-factory init
 
+# Optional: Set custom projects directory
+export CODE_FACTORY_PROJECTS_DIR=~/my-projects
+# Or use the --projects-dir flag
+code-factory init --projects-dir ~/my-projects
+
 # Check system status
 code-factory status
 
 # (More commands coming soon)
 ```
+
+## ⚙️ Configuration
+
+The Code Factory uses a flexible configuration system:
+
+1. **Environment Variables** (recommended for persistent settings):
+   ```bash
+   export CODE_FACTORY_PROJECTS_DIR=~/my-projects
+   export CODE_FACTORY_LOG_LEVEL=INFO
+   ```
+
+2. **CLI Flags** (for per-command overrides):
+   ```bash
+   code-factory init --projects-dir /path/to/projects
+   code-factory status --projects-dir /path/to/projects
+   ```
+
+3. **Default Values**:
+   - Projects directory: `~/.code-factory/projects`
+   - Log level: `INFO`
+
+The configuration system automatically creates the projects directory if it doesn't exist.
 
 ## 📋 Requirements
 
