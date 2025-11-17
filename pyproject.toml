@@ -37,3 +37,28 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = [
+    "--cov=code_factory",
+    "--cov-report=html",
+    "--cov-report=term-missing",
+    "--cov-fail-under=70",
+    "-v"
+]
+
+[tool.coverage.run]
+source = ["src/code_factory"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]

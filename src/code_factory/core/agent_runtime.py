@@ -6,13 +6,15 @@ for all specialized agents in the factory.
 """
 
 import logging
+import signal
+import threading
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, Optional, Type
 
 from pydantic import BaseModel
 
-from code_factory.core.models import AgentRun
+from code_factory.core.models import AgentRun, AgentTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +93,49 @@ class AgentExecutionError(Exception):
     pass
 
 
+class TimeoutContext:
+    """
+    Context manager for agent execution timeout
+
+    Uses threading.Timer for cross-platform compatibility.
+    This approach works on Windows, Linux, and macOS.
+    """
+
+    def __init__(self, timeout_seconds: int, agent_name: str):
+        self.timeout_seconds = timeout_seconds
+        self.agent_name = agent_name
+        self.timer = None
+        self.timed_out = False
+        self.result = None
+        self.exception = None
+
+    def _timeout_handler(self):
+        """Called when timeout is reached"""
+        self.timed_out = True
+        logger.error(
+            f"Agent '{self.agent_name}' timed out after {self.timeout_seconds} seconds"
+        )
+
+    def __enter__(self):
+        """Start the timeout timer"""
+        if self.timeout_seconds > 0:
+            self.timer = threading.Timer(self.timeout_seconds, self._timeout_handler)
+            self.timer.daemon = True
+            self.timer.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Cancel the timeout timer"""
+        if self.timer:
+            self.timer.cancel()
+
+        # If we timed out, raise the timeout error
+        if self.timed_out:
+            raise AgentTimeoutError(self.agent_name, self.timeout_seconds)
+
+        return False  # Don't suppress exceptions
+
+
 
 class AgentRuntime:
     """
@@ -149,15 +194,18 @@ class AgentRuntime:
         timeout_seconds: Optional[int] = None
     ) -> AgentRun:
         """
-        Execute an agent with error handling and logging
-        
+        Execute an agent with error handling, logging, and timeout
+
         Args:
             agent_name: Name of agent to execute
             input_data: Input for the agent
-            timeout_seconds: Optional execution timeout (not yet implemented)
-            
+            timeout_seconds: Execution timeout in seconds (uses default if not provided)
+
         Returns:
             AgentRun: Execution record with results or error
+
+        Raises:
+            AgentTimeoutError: If agent exceeds timeout (captured in AgentRun)
         """
         agent = self.get_agent(agent_name)
         if not agent:
@@ -170,32 +218,56 @@ class AgentRuntime:
                 error=error_msg,
                 completed_at=datetime.now()
             )
-        
+
+        # Use default timeout if not provided
+        if timeout_seconds is None:
+            from code_factory.core.config import get_config
+            timeout_seconds = get_config().default_agent_timeout
+
         run = AgentRun(
             agent_name=agent_name,
             input_data=input_data.model_dump(),
             status="running"
         )
-        
+
         try:
-            logger.info(f"Executing agent: {agent_name}")
-            output = agent.execute(input_data)
-            
+            logger.info(
+                f"Executing agent: {agent_name} "
+                f"(timeout: {timeout_seconds}s)"
+            )
+
+            # Execute with timeout
+            with TimeoutContext(timeout_seconds, agent_name):
+                output = agent.execute(input_data)
+
             run.output_data = output.model_dump()
             run.status = "success"
             run.completed_at = datetime.now()
             run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
-            
-            logger.info(f"Agent {agent_name} completed successfully")
-            
+
+            logger.info(
+                f"Agent {agent_name} completed successfully "
+                f"in {run.duration_seconds:.2f}s"
+            )
+
+        except AgentTimeoutError as e:
+            run.status = "timeout"
+            run.error = str(e)
+            run.completed_at = datetime.now()
+            run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
+
+            logger.error(
+                f"Agent {agent_name} timed out after {timeout_seconds}s"
+            )
+
         except Exception as e:
             run.status = "failed"
             run.error = str(e)
             run.completed_at = datetime.now()
             run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
-            
-            logger.error(f"Agent {agent_name} failed: {e}")
-        
+
+            logger.error(f"Agent {agent_name} failed: {e}", exc_info=True)
+
         self._execution_history.append(run)
         return run
     

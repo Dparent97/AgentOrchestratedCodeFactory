@@ -11,10 +11,13 @@ The Orchestrator is the main controller that:
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from code_factory.core.agent_runtime import AgentRuntime
-from code_factory.core.models import Idea, ProjectResult, ProjectSpec, Task
+from code_factory.core.checkpoint import CheckpointManager, Checkpoint
+from code_factory.core.config import FactoryConfig, get_config
+from code_factory.core.models import Idea, ProjectResult, ProjectSpec, Task, AgentRun
+from code_factory.core.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +30,20 @@ class Orchestrator:
     into a complete project.
     """
     
-    def __init__(self, runtime: AgentRuntime, projects_dir: str = "/Users/dp/Projects"):
+    def __init__(self, runtime: AgentRuntime, config: Optional[FactoryConfig] = None):
         """
         Initialize the orchestrator
-        
+
         Args:
             runtime: AgentRuntime with registered agents
-            projects_dir: Root directory for generated projects
+            config: Factory configuration (uses default if not provided)
         """
         self.runtime = runtime
-        self.projects_dir = Path(projects_dir)
+        self.config = config or get_config()
+        self.projects_dir = self.config.projects_dir
         self._current_run: Optional[ProjectResult] = None
+        self._checkpoint_manager: Optional[CheckpointManager] = None
+        self._completed_runs: List[AgentRun] = []
     
     def run_factory(self, idea: Idea) -> ProjectResult:
         """
@@ -122,27 +128,136 @@ class Orchestrator:
         logger.info(f"Factory run completed: success={result.success}")
         return result
     
-    def checkpoint(self, stage: str, message: str) -> None:
+    def checkpoint(
+        self,
+        stage: str,
+        idea: Idea,
+        project_path: Optional[Path] = None,
+        metadata: Optional[dict] = None
+    ) -> Checkpoint:
         """
-        Create a Git checkpoint at a major stage
-        
+        Create a checkpoint at a major stage
+
+        Saves pipeline state to enable resuming from this point.
+
         Args:
             stage: Stage name (e.g., "planning", "implementation")
-            message: Commit message
+            idea: Original project idea
+            project_path: Path to project directory
+            metadata: Additional metadata
+
+        Returns:
+            Checkpoint: Created checkpoint
         """
-        logger.info(f"Checkpoint: {stage} - {message}")
-        # TODO: Implement Git commit via GitOpsAgent
+        logger.info(f"Creating checkpoint: {stage}")
+
+        if not self._checkpoint_manager:
+            project_name = metadata.get("project_name", "unknown") if metadata else "unknown"
+            self._checkpoint_manager = CheckpointManager(project_name)
+
+        checkpoint = self._checkpoint_manager.save_checkpoint(
+            stage_name=stage,
+            idea=idea,
+            completed_runs=self._completed_runs.copy(),
+            project_path=project_path,
+            metadata=metadata or {},
+        )
+
+        logger.info(f"Checkpoint created: {checkpoint.checkpoint_id}")
+        return checkpoint
     
-    def handle_failure(self, agent_name: str, error: Exception) -> None:
+    def handle_failure(
+        self,
+        agent_name: str,
+        error: Exception,
+        stage: str,
+        idea: Idea,
+        offer_recovery: bool = True
+    ) -> dict:
         """
-        Handle agent execution failure
-        
+        Handle agent execution failure with recovery options
+
         Args:
             agent_name: Name of the failed agent
             error: The exception that occurred
+            stage: Current pipeline stage
+            idea: Original project idea
+            offer_recovery: Whether to offer recovery options
+
+        Returns:
+            dict: Recovery options and information
         """
-        logger.error(f"Agent {agent_name} failed: {error}")
-        # TODO: Implement recovery or rollback logic
+        logger.error(f"Agent {agent_name} failed at stage '{stage}': {error}")
+
+        # Load last successful checkpoint
+        last_checkpoint = None
+        if self._checkpoint_manager:
+            last_checkpoint = self._checkpoint_manager.load_checkpoint()
+
+        recovery_info = {
+            "failed_agent": agent_name,
+            "failed_stage": stage,
+            "error": str(error),
+            "last_checkpoint": None,
+            "can_resume": False,
+            "recovery_options": [],
+        }
+
+        if last_checkpoint:
+            recovery_info["last_checkpoint"] = {
+                "stage": last_checkpoint.stage_name,
+                "timestamp": last_checkpoint.timestamp.isoformat(),
+                "checkpoint_id": last_checkpoint.checkpoint_id,
+            }
+            recovery_info["can_resume"] = True
+            recovery_info["recovery_options"].append({
+                "option": "resume",
+                "description": f"Resume from checkpoint: {last_checkpoint.stage_name}",
+            })
+
+        if offer_recovery:
+            recovery_info["recovery_options"].extend([
+                {
+                    "option": "retry",
+                    "description": f"Retry stage '{stage}' from the beginning",
+                },
+                {
+                    "option": "skip",
+                    "description": f"Skip stage '{stage}' and continue (may cause issues)",
+                },
+                {
+                    "option": "abort",
+                    "description": "Abort the pipeline and clean up",
+                },
+            ])
+
+        logger.info(
+            f"Recovery options available: {len(recovery_info['recovery_options'])}"
+        )
+
+        return recovery_info
+
+    def resume_from_checkpoint(self, checkpoint_id: Optional[str] = None) -> Optional[Checkpoint]:
+        """
+        Resume pipeline from a checkpoint
+
+        Args:
+            checkpoint_id: Specific checkpoint to resume from (uses latest if None)
+
+        Returns:
+            Checkpoint: Loaded checkpoint, or None if not found
+        """
+        if not self._checkpoint_manager:
+            logger.error("No checkpoint manager available")
+            return None
+
+        checkpoint = self._checkpoint_manager.load_checkpoint(checkpoint_id)
+
+        if checkpoint:
+            logger.info(f"Resuming from checkpoint: {checkpoint.stage_name}")
+            self._completed_runs = checkpoint.completed_runs.copy()
+
+        return checkpoint
     
     def get_current_status(self) -> dict:
         """

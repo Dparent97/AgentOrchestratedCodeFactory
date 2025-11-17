@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from code_factory import __version__
 from code_factory.core.agent_runtime import AgentRuntime
+from code_factory.core.config import get_config, load_config
 from code_factory.core.orchestrator import Orchestrator
 from code_factory.agents.planner import PlannerAgent
 from code_factory.agents.architect import ArchitectAgent
@@ -133,12 +134,11 @@ def status():
     else:
         console.print(f"  Git: Not initialized")
     
-    # Projects directory
-    projects_dir = Path("/Users/dp/Projects")
-    if projects_dir.exists():
-        console.print(f"  Projects Directory: {projects_dir} ✓")
-    else:
-        console.print(f"  Projects Directory: {projects_dir} (not found)")
+    # Configuration
+    config = get_config()
+    console.print(f"  Projects Directory: {config.projects_dir}")
+    console.print(f"  Checkpoint Directory: {config.checkpoint_dir}")
+    console.print(f"  Agent Timeout: {config.default_agent_timeout}s")
     
     console.print()
     

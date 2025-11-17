@@ -12,6 +12,18 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
+# Custom exceptions
+class AgentTimeoutError(Exception):
+    """Raised when an agent execution exceeds its timeout"""
+
+    def __init__(self, agent_name: str, timeout_seconds: int):
+        self.agent_name = agent_name
+        self.timeout_seconds = timeout_seconds
+        super().__init__(
+            f"Agent '{agent_name}' exceeded timeout of {timeout_seconds} seconds"
+        )
+
+
 class TaskType(str, Enum):
     """Types of tasks that can be executed"""
     CONFIG = "config"
@@ -154,10 +166,34 @@ class AgentRun(BaseModel):
     duration_seconds: Optional[float] = None
 
 
+class SafetyCheckMetadata(BaseModel):
+    """
+    Metadata about a safety check execution
+
+    Provides audit trail and debugging information for safety decisions.
+    """
+    normalized_input: str = Field(..., description="Normalized input text")
+    patterns_matched: List[str] = Field(
+        default_factory=list,
+        description="Dangerous patterns that matched"
+    )
+    bypass_attempts_detected: List[str] = Field(
+        default_factory=list,
+        description="Detected bypass attempts (e.g., obfuscation)"
+    )
+    confidence_score: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in safety decision (0-1)"
+    )
+    check_timestamp: datetime = Field(default_factory=datetime.now)
+
+
 class SafetyCheck(BaseModel):
     """
     Result of safety validation
-    
+
     Output of SafetyGuard agent indicating whether an idea is safe
     to proceed with, and any warnings or confirmations needed.
     """
@@ -173,6 +209,10 @@ class SafetyCheck(BaseModel):
     blocked_keywords: List[str] = Field(
         default_factory=list,
         description="Dangerous keywords found in idea"
+    )
+    metadata: Optional[SafetyCheckMetadata] = Field(
+        None,
+        description="Audit trail and debugging information"
     )
 
 
