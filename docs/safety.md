@@ -185,25 +185,102 @@ All Git operations are logged to `git_activity.log`:
 
 ## SafetyGuard Agent Logic
 
-The SafetyGuard agent reviews every idea before execution:
+The SafetyGuard agent implements **defense-in-depth security** with multiple validation layers to prevent bypass attempts. Every idea is reviewed through 5 security layers before execution:
 
-### Automatic Rejection
+### Layer 1: Input Normalization
 
-Ideas containing these keywords are automatically rejected:
-- control, actuate, activate, trigger (in equipment context)
-- override, bypass, disable (in safety context)
-- hack, crack, exploit, inject
-- delete system, format drive, rm -rf /
+**Purpose**: Prevent bypass via obfuscation techniques
 
-### Requires Human Review
+The SafetyGuard normalizes all input text to prevent common bypass attempts:
 
-Ideas containing these patterns require confirmation:
-- network, API, external calls
-- delete, remove, purge (in file context)
-- email, SMS, notifications
-- sudo, admin, privileged
+- **Unicode normalization** (NFKD) - removes accents and diacritics
+- **Lowercase conversion** - eliminates case-based bypasses
+- **Separator normalization** - converts `_`, `-`, `.`, `/`, `\` to spaces
+- **Whitespace collapsing** - removes multiple/zero-width spaces
+- **Zero-width character removal** - prevents invisible character bypasses
 
-### Auto-Approved
+**Examples of prevented bypasses**:
+```
+❌ "control_equipment" → normalized to "control equipment" → BLOCKED
+❌ "control-equipment" → normalized to "control equipment" → BLOCKED
+❌ "Control Equipment" → normalized to "control equipment" → BLOCKED
+❌ "control  equipment" → normalized to "control equipment" → BLOCKED
+❌ "controlequipment" → kept as "controlequipment" → Still caught by patterns
+```
+
+### Layer 2: Regex Pattern Matching
+
+**Purpose**: Robustly detect dangerous operations
+
+Uses regex-based patterns instead of simple substring matching:
+
+**Automatic Rejection** (Critical Severity):
+- Physical control: `control\s*equipment`, `actuate`, `bypass\s*interlock`
+- Safety systems: `override\s*safety`, `disable\s*alarm`
+- Security violations: `hack`, `exploit`, `crack\s*password`, `inject`, `malware`
+- Destructive operations: `rm\s*-?r?f\s*/`, `format\s*drive`, `drop\s*database`
+- Obfuscation attempts: `eval\(`, `exec\(`, `base64.*decode`
+
+**Requires Human Review** (Medium/High Severity):
+- File operations: `delete\s*file`
+- Network operations: `send\s*email`, `api\s*request`
+- Elevated privileges: `sudo`, `admin\s*privilege`
+- System calls: `subprocess`, `system\s*call`
+
+### Layer 3: Semantic Analysis
+
+**Purpose**: Context-aware detection of dangerous intent
+
+Analyzes combinations of action verbs and destructive indicators:
+
+- **Destructive verbs**: destroy, wipe, erase, corrupt, damage, break, crash, kill
+- **Risky combinations**: "system control", "obfuscate + execute", "encode + eval"
+- **Missing safe operations**: Flags inputs with no clearly approved actions
+
+**Example detections**:
+```
+"Override safety and destroy old equipment"
+↓
+✗ Pattern: "override safety" → BLOCKED
+✗ Semantic: Destructive verbs (destroy) → BLOCKED
+```
+
+### Layer 4: Whitelist Validation
+
+**Purpose**: Explicitly approve known-safe operations
+
+**Approved safe operations**:
+- Read/Display: read, display, show, list, view, get, fetch
+- Calculate: calculate, compute, analyze, parse, validate
+- Transform: format, convert, transform, encode, decode
+- Monitor: log, track, monitor, measure, report
+- Search: search, find, filter, sort, query
+- Create: create, generate, build, make, initialize
+- Test: test, verify, check, inspect, scan
+- Update: update, modify, edit, change, adjust (when properly scoped)
+- Help: help, guide, assist, support, document
+
+Ideas containing primarily non-approved operations receive warnings and reduced confidence scores.
+
+### Layer 5: Audit Trail
+
+**Purpose**: Full transparency and accountability
+
+Every safety check generates detailed metadata:
+
+- **Timestamp**: When the check was performed
+- **Normalized text**: The sanitized input used for checking
+- **Patterns matched**: Which specific patterns triggered (for audit)
+- **Semantic flags**: What semantic issues were detected
+- **Whitelist violations**: Unapproved operations found
+- **Confidence score**: 0.0-1.0 indicating certainty in the decision
+
+All decisions are logged with severity levels:
+- `INFO`: Approved operations with confirmations
+- `WARNING`: Pattern matches and semantic flags
+- `ERROR`: Blocked operations and security violations
+
+**Auto-Approved**
 
 Ideas clearly focused on these are auto-approved:
 - parse, analyze, read, monitor
@@ -362,6 +439,80 @@ If an idea approaches these boundaries, the factory **MUST** reject it, regardle
 
 ---
 
+## Security Improvements (v2.0)
+
+### Bypass Prevention
+
+The SafetyGuard has been hardened against sophisticated bypass attempts:
+
+**Previously vulnerable to**:
+- `control_equipment` (underscore bypass)
+- `Control Equipment` (case variation)
+- `control  equipment` (multiple spaces)
+- `controlequipment` (concatenation)
+- Unicode obfuscation with accents/diacritics
+
+**Now protected by**:
+- Multi-layer normalization (see Layer 1 above)
+- Regex-based pattern matching with `\s*` for flexible spacing
+- Semantic analysis for context-aware detection
+- Comprehensive audit logging for all decisions
+
+### Defense-in-Depth Architecture
+
+Each layer provides independent protection:
+
+1. **Normalization** prevents obfuscation
+2. **Pattern matching** catches known dangerous operations
+3. **Semantic analysis** detects novel/combined threats
+4. **Whitelist validation** ensures operations are approved
+5. **Audit trail** provides accountability and forensics
+
+Even if one layer is bypassed, others provide backup protection.
+
+### Testing Coverage
+
+Comprehensive test suite (`tests/unit/test_safety_guard.py`) validates:
+
+- ✅ All known bypass techniques are blocked
+- ✅ Normalization handles edge cases (Unicode, zero-width chars, etc.)
+- ✅ Pattern matching is resistant to obfuscation
+- ✅ Semantic analysis detects destructive intent
+- ✅ Safe operations are correctly approved
+- ✅ Audit trail captures all decisions
+- ✅ Multi-layer defense works together
+
+**Test categories**:
+- Normalization tests (8 scenarios)
+- Bypass prevention tests (6 techniques)
+- Dangerous pattern tests (15+ patterns)
+- Semantic analysis tests (4 scenarios)
+- Whitelist validation tests (3 scenarios)
+- Audit trail tests (5 scenarios)
+- Edge case tests (7 scenarios)
+
+### Audit and Forensics
+
+Every safety decision is logged with:
+
+```
+AUDIT: timestamp=2025-01-15T10:23:45.123456, approved=False,
+       violations=2, confirmations=0
+```
+
+Metadata includes:
+- Original input text
+- Normalized text used for checking
+- All patterns that matched
+- Semantic flags detected
+- Confidence score in the decision
+
+This enables:
+- Post-incident investigation
+- Pattern analysis for new threats
+- Compliance auditing
+- Security metrics and reporting
+
 ## Future Safety Enhancements
 
 1. **Sandboxed Execution**: Run generated code in isolated containers
@@ -369,6 +520,9 @@ If an idea approaches these boundaries, the factory **MUST** reject it, regardle
 3. **Human Review Queue**: Escalate ambiguous cases
 4. **Safety Metrics**: Track rejection rates and patterns
 5. **Community Reporting**: Allow users to flag unsafe templates
+6. **Machine Learning**: Train models on attack patterns for better detection
+7. **Rate Limiting**: Prevent automated bypass attempts
+8. **Honeypot Patterns**: Detect sophisticated attackers
 
 ---
 
