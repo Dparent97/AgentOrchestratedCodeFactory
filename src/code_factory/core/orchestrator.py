@@ -14,9 +14,21 @@ from pathlib import Path
 from typing import Optional
 
 from code_factory.core.agent_runtime import AgentRuntime
-from code_factory.core.models import Idea, ProjectResult, ProjectSpec, Task
+from code_factory.core.models import Idea, ProjectResult, ProjectSpec, Task, AgentTimeoutError
 
 logger = logging.getLogger(__name__)
+
+# Stage-specific timeouts (in seconds)
+STAGE_TIMEOUTS = {
+    "safety_guard": 60,      # 1 minute for safety checks
+    "planner": 180,          # 3 minutes for planning
+    "architect": 300,        # 5 minutes for architecture
+    "advisor": 120,          # 2 minutes for advisory
+    "implementer": 600,      # 10 minutes for code generation
+    "tester": 300,           # 5 minutes for test generation
+    "doc_writer": 180,       # 3 minutes for documentation
+    "git_ops": 120,          # 2 minutes for git operations
+}
 
 
 class Orchestrator:
@@ -30,7 +42,7 @@ class Orchestrator:
     def __init__(self, runtime: AgentRuntime, projects_dir: str = "/Users/dp/Projects"):
         """
         Initialize the orchestrator
-        
+
         Args:
             runtime: AgentRuntime with registered agents
             projects_dir: Root directory for generated projects
@@ -38,6 +50,82 @@ class Orchestrator:
         self.runtime = runtime
         self.projects_dir = Path(projects_dir)
         self._current_run: Optional[ProjectResult] = None
+
+    def execute_agent_with_retry(
+        self,
+        agent_name: str,
+        input_data,
+        max_retries: int = 3,
+        timeout_seconds: Optional[int] = None
+    ):
+        """
+        Execute an agent with retry logic and exponential backoff
+
+        Args:
+            agent_name: Name of agent to execute
+            input_data: Input for the agent
+            max_retries: Maximum number of retry attempts (default: 3)
+            timeout_seconds: Execution timeout (uses stage-specific or default if not provided)
+
+        Returns:
+            AgentRun: Execution record with results or error
+
+        Notes:
+            - Uses exponential backoff: 2s, 4s, 8s between retries
+            - Only retries on transient failures (not timeouts or validation errors)
+            - Logs all retry attempts for debugging
+        """
+        import time
+
+        # Use stage-specific timeout if not provided
+        if timeout_seconds is None:
+            timeout_seconds = STAGE_TIMEOUTS.get(agent_name, 300)
+
+        last_run = None
+        for attempt in range(max_retries):
+            if attempt > 0:
+                # Exponential backoff: 2^attempt seconds
+                backoff_seconds = 2 ** attempt
+                logger.info(
+                    f"Retrying agent {agent_name} (attempt {attempt + 1}/{max_retries}) "
+                    f"after {backoff_seconds}s backoff"
+                )
+                time.sleep(backoff_seconds)
+
+            run = self.runtime.execute_agent(
+                agent_name=agent_name,
+                input_data=input_data,
+                timeout_seconds=timeout_seconds
+            )
+            last_run = run
+
+            # Check if execution succeeded
+            if run.status == "success":
+                if attempt > 0:
+                    logger.info(f"Agent {agent_name} succeeded on attempt {attempt + 1}")
+                return run
+
+            # Check if error is timeout
+            is_timeout = run.error and "TIMEOUT" in run.error
+
+            # Don't retry on timeout or validation errors
+            if is_timeout:
+                logger.warning(
+                    f"Agent {agent_name} timed out - not retrying. "
+                    f"Consider increasing timeout from {timeout_seconds}s"
+                )
+                self.handle_failure(agent_name, Exception(run.error), is_timeout=True)
+                break
+            elif "validation" in run.error.lower() or "invalid" in run.error.lower():
+                logger.warning(f"Agent {agent_name} has validation error - not retrying")
+                break
+
+            # Transient error - will retry
+            logger.warning(
+                f"Agent {agent_name} failed (attempt {attempt + 1}/{max_retries}): {run.error}"
+            )
+
+        return last_run
     
     def run_factory(self, idea: Idea) -> ProjectResult:
         """
@@ -133,15 +221,22 @@ class Orchestrator:
         logger.info(f"Checkpoint: {stage} - {message}")
         # TODO: Implement Git commit via GitOpsAgent
     
-    def handle_failure(self, agent_name: str, error: Exception) -> None:
+    def handle_failure(self, agent_name: str, error: Exception, is_timeout: bool = False) -> None:
         """
         Handle agent execution failure
-        
+
         Args:
             agent_name: Name of the failed agent
             error: The exception that occurred
+            is_timeout: Whether the failure was due to a timeout
         """
-        logger.error(f"Agent {agent_name} failed: {error}")
+        if is_timeout:
+            logger.error(
+                f"Agent {agent_name} timed out: {error}. "
+                "Consider increasing timeout or optimizing agent logic."
+            )
+        else:
+            logger.error(f"Agent {agent_name} failed: {error}")
         # TODO: Implement recovery or rollback logic
     
     def get_current_status(self) -> dict:

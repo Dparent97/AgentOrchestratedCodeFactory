@@ -218,10 +218,25 @@ class TestResult(BaseModel):
     success: bool = Field(default=False)
 
 
+class AgentTimeoutError(Exception):
+    """
+    Raised when agent execution exceeds timeout
+
+    This exception is raised when an agent takes longer than the
+    specified timeout to complete its execution. It includes information
+    about the agent and timeout duration for debugging.
+    """
+    def __init__(self, agent_name: str, timeout_seconds: int, message: Optional[str] = None):
+        self.agent_name = agent_name
+        self.timeout_seconds = timeout_seconds
+        default_message = f"Agent '{agent_name}' exceeded timeout of {timeout_seconds} seconds"
+        super().__init__(message or default_message)
+
+
 class ProjectResult(BaseModel):
     """
     Final result of factory execution
-    
+
     Contains the path to the generated project and metadata about
     the build process.
     """
