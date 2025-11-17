@@ -1,177 +1,237 @@
 """
-Configuration management for the Code Factory
+Configuration management for Code Factory
 
-Centralizes all configuration settings with environment variable support
-and sensible defaults. This ensures portability across platforms and
-proper separation of environment-specific values.
+Handles all configuration settings including paths, timeouts, and
+environment-specific settings. Makes the application portable across platforms.
 """
 
 import os
-import logging
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from pydantic import BaseModel, Field, field_validator
 
 
-class Config:
+class FactoryConfig(BaseModel):
     """
-    Configuration manager for the Code Factory
+    Central configuration for the Code Factory
 
-    Handles configuration loading from multiple sources with precedence:
-    1. Explicit parameters (highest priority)
-    2. Environment variables
-    3. Default values (lowest priority)
+    All configurable settings are defined here. Values can be overridden
+    via environment variables or configuration files.
     """
 
-    # Environment variable names
-    ENV_PROJECTS_DIR = "CODE_FACTORY_PROJECTS_DIR"
-    ENV_LOG_LEVEL = "CODE_FACTORY_LOG_LEVEL"
+    # Directory settings
+    projects_dir: Path = Field(
+        default_factory=lambda: Path.home() / "code-factory-projects",
+        description="Root directory for generated projects"
+    )
 
-    # Default values
-    DEFAULT_PROJECTS_DIR = Path.home() / ".code-factory" / "projects"
-    DEFAULT_LOG_LEVEL = "INFO"
+    checkpoint_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".code-factory" / "checkpoints",
+        description="Directory for storing checkpoints"
+    )
 
-    def __init__(self):
-        """Initialize configuration with defaults"""
-        self._projects_dir: Optional[Path] = None
-        self._log_level: str = self.DEFAULT_LOG_LEVEL
-        self._load_from_env()
+    staging_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".code-factory" / "staging",
+        description="Temporary directory for work-in-progress"
+    )
 
-    def _load_from_env(self) -> None:
-        """Load configuration from environment variables"""
-        # Load projects directory
-        projects_dir_str = os.getenv(self.ENV_PROJECTS_DIR)
-        if projects_dir_str:
-            self._projects_dir = Path(projects_dir_str).expanduser().resolve()
-            logger.debug(f"Loaded projects_dir from env: {self._projects_dir}")
+    # Timeout settings (in seconds)
+    default_agent_timeout: int = Field(
+        default=300,
+        description="Default timeout for agent execution (5 minutes)"
+    )
 
-        # Load log level
-        log_level = os.getenv(self.ENV_LOG_LEVEL)
-        if log_level:
-            self._log_level = log_level.upper()
-            logger.debug(f"Loaded log_level from env: {self._log_level}")
+    safety_check_timeout: int = Field(
+        default=30,
+        description="Timeout for safety validation (30 seconds)"
+    )
 
-    @property
-    def projects_dir(self) -> Path:
-        """
-        Get the projects directory path
+    llm_api_timeout: int = Field(
+        default=120,
+        description="Timeout for LLM API calls (2 minutes)"
+    )
 
-        Returns the projects directory from:
-        1. Explicitly set value (via set_projects_dir)
-        2. Environment variable CODE_FACTORY_PROJECTS_DIR
-        3. Default: ~/.code-factory/projects
+    # Retry settings
+    max_retries: int = Field(
+        default=3,
+        description="Maximum number of retries for failed operations"
+    )
 
-        Returns:
-            Path: The projects directory path
-        """
-        if self._projects_dir is None:
-            self._projects_dir = self.DEFAULT_PROJECTS_DIR
-        return self._projects_dir
+    retry_backoff_base: float = Field(
+        default=2.0,
+        description="Base for exponential backoff (seconds)"
+    )
 
-    def set_projects_dir(self, path: str | Path) -> None:
-        """
-        Explicitly set the projects directory
+    # Safety settings
+    enable_safety_guard: bool = Field(
+        default=True,
+        description="Whether to enforce safety checks"
+    )
 
-        This takes precedence over environment variables and defaults.
+    strict_safety_mode: bool = Field(
+        default=True,
+        description="Use strict safety validation with multiple layers"
+    )
 
-        Args:
-            path: Path to the projects directory
-        """
-        self._projects_dir = Path(path).expanduser().resolve()
-        logger.info(f"Projects directory set to: {self._projects_dir}")
+    # Testing settings
+    enable_test_generation: bool = Field(
+        default=True,
+        description="Whether to generate tests automatically"
+    )
 
-    @property
-    def log_level(self) -> str:
-        """
-        Get the log level
+    min_test_coverage: float = Field(
+        default=80.0,
+        description="Minimum test coverage percentage required"
+    )
 
-        Returns:
-            str: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        """
-        return self._log_level
+    # Git settings
+    enable_git_ops: bool = Field(
+        default=True,
+        description="Whether to initialize Git repositories"
+    )
 
-    def set_log_level(self, level: str) -> None:
-        """
-        Set the log level
+    git_auto_commit: bool = Field(
+        default=True,
+        description="Automatically commit after each stage"
+    )
 
-        Args:
-            level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        """
-        self._log_level = level.upper()
-        logger.info(f"Log level set to: {self._log_level}")
+    # Logging settings
+    log_level: str = Field(
+        default="INFO",
+        description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+    )
 
-    def ensure_projects_dir(self) -> Path:
-        """
-        Ensure the projects directory exists
+    enable_audit_log: bool = Field(
+        default=True,
+        description="Log all safety decisions for audit trail"
+    )
 
-        Creates the directory and any parent directories if they don't exist.
+    @field_validator("projects_dir", "checkpoint_dir", "staging_dir", mode="before")
+    @classmethod
+    def expand_path(cls, v) -> Path:
+        """Expand environment variables and user home directory in paths"""
+        if isinstance(v, str):
+            v = os.path.expandvars(os.path.expanduser(v))
+        return Path(v)
 
-        Returns:
-            Path: The projects directory path
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Ensure log level is valid"""
+        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        v = v.upper()
+        if v not in valid_levels:
+            raise ValueError(f"Log level must be one of: {', '.join(valid_levels)}")
+        return v
 
-        Raises:
-            OSError: If directory creation fails
-        """
-        projects_path = self.projects_dir
+    def ensure_directories(self) -> None:
+        """Create required directories if they don't exist"""
+        for dir_path in [self.projects_dir, self.checkpoint_dir, self.staging_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
 
-        if not projects_path.exists():
-            logger.info(f"Creating projects directory: {projects_path}")
-            try:
-                projects_path.mkdir(parents=True, exist_ok=True)
-                logger.info(f"Successfully created: {projects_path}")
-            except OSError as e:
-                logger.error(f"Failed to create projects directory: {e}")
-                raise
-        else:
-            logger.debug(f"Projects directory already exists: {projects_path}")
-
-        # Verify it's actually a directory
-        if not projects_path.is_dir():
-            raise OSError(f"Projects path exists but is not a directory: {projects_path}")
-
-        return projects_path
-
-    def get_config_summary(self) -> dict:
-        """
-        Get a summary of current configuration
-
-        Returns:
-            dict: Configuration summary
-        """
-        return {
-            "projects_dir": str(self.projects_dir),
-            "projects_dir_exists": self.projects_dir.exists(),
-            "log_level": self.log_level,
-            "env_variables": {
-                self.ENV_PROJECTS_DIR: os.getenv(self.ENV_PROJECTS_DIR),
-                self.ENV_LOG_LEVEL: os.getenv(self.ENV_LOG_LEVEL),
-            }
-        }
+    class Config:
+        """Pydantic configuration"""
+        validate_assignment = True
 
 
-# Global configuration instance
-_config: Optional[Config] = None
-
-
-def get_config() -> Config:
+def load_config(
+    projects_dir: Optional[str] = None,
+    config_file: Optional[Path] = None,
+) -> FactoryConfig:
     """
-    Get the global configuration instance
+    Load configuration from environment variables, config file, or defaults
+
+    Priority order (highest to lowest):
+    1. Explicit parameters passed to this function
+    2. Environment variables (CODE_FACTORY_*)
+    3. Configuration file
+    4. Default values
+
+    Args:
+        projects_dir: Override projects directory
+        config_file: Path to configuration file (JSON or YAML)
 
     Returns:
-        Config: The global configuration object
+        FactoryConfig: Loaded configuration
+
+    Environment variables:
+        CODE_FACTORY_PROJECTS_DIR: Projects directory path
+        CODE_FACTORY_DEFAULT_AGENT_TIMEOUT: Agent timeout in seconds
+        CODE_FACTORY_ENABLE_SAFETY_GUARD: Enable/disable safety checks (true/false)
+        CODE_FACTORY_LOG_LEVEL: Logging level
+    """
+    config_dict = {}
+
+    # Load from environment variables
+    env_mappings = {
+        "CODE_FACTORY_PROJECTS_DIR": "projects_dir",
+        "CODE_FACTORY_CHECKPOINT_DIR": "checkpoint_dir",
+        "CODE_FACTORY_STAGING_DIR": "staging_dir",
+        "CODE_FACTORY_DEFAULT_AGENT_TIMEOUT": "default_agent_timeout",
+        "CODE_FACTORY_SAFETY_CHECK_TIMEOUT": "safety_check_timeout",
+        "CODE_FACTORY_LLM_API_TIMEOUT": "llm_api_timeout",
+        "CODE_FACTORY_MAX_RETRIES": "max_retries",
+        "CODE_FACTORY_ENABLE_SAFETY_GUARD": "enable_safety_guard",
+        "CODE_FACTORY_STRICT_SAFETY_MODE": "strict_safety_mode",
+        "CODE_FACTORY_LOG_LEVEL": "log_level",
+    }
+
+    for env_var, config_key in env_mappings.items():
+        value = os.environ.get(env_var)
+        if value is not None:
+            # Convert boolean strings
+            if value.lower() in ("true", "1", "yes"):
+                value = True
+            elif value.lower() in ("false", "0", "no"):
+                value = False
+            # Convert numeric strings
+            elif value.isdigit():
+                value = int(value)
+
+            config_dict[config_key] = value
+
+    # Load from config file if provided
+    if config_file and config_file.exists():
+        import json
+        with open(config_file) as f:
+            file_config = json.load(f)
+            # File config has lower priority than env vars
+            config_dict = {**file_config, **config_dict}
+
+    # Override with explicit parameters (highest priority)
+    if projects_dir is not None:
+        config_dict["projects_dir"] = projects_dir
+
+    config = FactoryConfig(**config_dict)
+    config.ensure_directories()
+
+    return config
+
+
+# Global config instance (can be overridden by calling load_config)
+_config: Optional[FactoryConfig] = None
+
+
+def get_config() -> FactoryConfig:
+    """
+    Get the current configuration instance
+
+    Returns:
+        FactoryConfig: Current configuration
     """
     global _config
     if _config is None:
-        _config = Config()
+        _config = load_config()
     return _config
 
 
-def reset_config() -> None:
+def set_config(config: FactoryConfig) -> None:
     """
-    Reset the global configuration instance
+    Set the global configuration instance
 
-    Useful for testing or when configuration needs to be reloaded.
+    Args:
+        config: Configuration to use
     """
     global _config
-    _config = None
+    _config = config

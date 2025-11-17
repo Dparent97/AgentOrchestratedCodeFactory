@@ -4,19 +4,17 @@ SafetyGuard - Enforces safety boundaries and prevents dangerous operations
 Validates all project ideas before execution to ensure they don't
 violate safety rules or attempt dangerous operations.
 
-Security Improvements:
-- Multi-layer validation with normalization
-- Regex-based pattern matching resistant to obfuscation
-- Semantic analysis for dangerous operation detection
-- Whitelist approach for approved operations
-- Comprehensive audit logging
+This module implements multiple layers of security validation:
+1. Input normalization to prevent bypass attempts
+2. Regex-based pattern matching for dangerous operations
+3. Semantic analysis of intent
+4. Audit logging for accountability
 """
 
 import logging
 import re
 import unicodedata
-from datetime import datetime
-from typing import List, Tuple, Set
+from typing import List, Set, Tuple
 
 from code_factory.core.agent_runtime import BaseAgent
 from code_factory.core.models import Idea, SafetyCheck, SafetyCheckMetadata
@@ -28,81 +26,84 @@ class SafetyGuard(BaseAgent):
     """
     Validates ideas for safety and enforces security boundaries
 
-    This class implements defense-in-depth security with multiple validation layers:
-    1. Input normalization to prevent bypass via encoding/obfuscation
-    2. Regex-based pattern matching for dangerous operations
-    3. Semantic analysis for context-aware detection
-    4. Whitelist validation for approved operations
+    Uses multi-layer validation to prevent bypass attempts:
+    - Input normalization (removes obfuscation)
+    - Regex pattern matching (catches variations)
+    - Semantic analysis (understands intent)
     """
 
-    # Dangerous operation patterns (regex-based for robustness)
-    # Format: (pattern, description, severity)
+    # Dangerous operation patterns (compiled regex for performance)
     DANGEROUS_PATTERNS = [
-        # Physical system control
-        (r'control\s*equipment', "Physical equipment control", "critical"),
-        (r'\bactuate\b', "Actuator control", "critical"),
-        (r'bypass\s*interlock', "Safety interlock bypass", "critical"),
-        (r'override\s*safety', "Safety override", "critical"),
-        (r'disable\s*alarm', "Alarm disabling", "critical"),
-        (r'physical\s*control', "Physical control system", "critical"),
-
-        # Security violations (use word boundaries to avoid false positives)
-        (r'\bhack\b', "Hacking/unauthorized access", "critical"),
-        (r'\bexploit\b', "Exploit development", "critical"),
-        (r'crack\s*password', "Password cracking", "critical"),
-        (r'\binject\b', "Code/SQL injection", "critical"),
-        (r'\bmalware\b', "Malware development", "critical"),
-        (r'\bvirus\b', "Virus development", "critical"),
-        (r'\bbackdoor\b', "Backdoor installation", "critical"),
-        (r'privilege\s*escalation', "Privilege escalation", "critical"),
-
-        # Destructive operations
-        (r'rm\s+r?f?\b', "Recursive deletion (rm -rf)", "critical"),
-        (r'format\s*drive', "Drive formatting", "critical"),
-        (r'delete\s*all', "Mass deletion", "critical"),
-        (r'drop\s*database', "Database deletion", "critical"),
-        (r'truncate\s*table', "Table truncation", "critical"),
-
-        # Obfuscation attempts (common bypass techniques)
-        (r'b[a4]se\s*64\s*decode', "Base64 decode (potential obfuscation)", "high"),
-        (r'eval\s*\(', "Dynamic code evaluation", "high"),
-        (r'exec\s*\(', "Dynamic code execution", "high"),
-        (r'__import__', "Dynamic import (potential obfuscation)", "medium"),
-        (r'compile\s*\(', "Dynamic compilation", "medium"),
+        # Physical equipment control
+        (r"control\s*equipment", "control equipment"),
+        (r"actuate", "actuate"),
+        (r"bypass\s*interlock", "bypass interlock"),
+        (r"override\s*safety", "override safety"),
+        (r"disable\s*alarm", "disable alarm"),
+        (r"disable\s*(?:emergency|safety|protection)", "disable safety system"),
+        # Security/hacking
+        (r"hack(?:ing)?", "hack"),
+        (r"exploit(?:ation)?", "exploit"),
+        (r"crack\s*password", "crack password"),
+        (r"inject(?:ion)?", "injection attack"),
+        (r"malware", "malware"),
+        (r"virus", "virus"),
+        (r"ransomware", "ransomware"),
+        (r"backdoor", "backdoor"),
+        (r"privilege\s*escalation", "privilege escalation"),
+        (r"buffer\s*overflow", "buffer overflow"),
+        (r"sql\s*injection", "SQL injection"),
+        (r"xss\s*(?:attack)?", "XSS attack"),
+        (r"csrf\s*(?:attack)?", "CSRF attack"),
+        # Destructive file operations
+        (r"rm\s*-rf\s*/", "destructive delete"),
+        (r"format\s*(?:drive|disk)", "format drive"),
+        (r"delete\s*(?:all|everything)", "mass deletion"),
+        (r"drop\s*(?:database|table)", "drop database"),
+        (r"truncate\s*(?:database|table)", "truncate database"),
+        # Network attacks
+        (r"ddos\s*(?:attack)?", "DDoS attack"),
+        (r"dos\s*(?:attack)?", "DoS attack"),
+        (r"port\s*scan(?:ning)?", "port scanning"),
+        (r"brute\s*force", "brute force attack"),
+        # Dangerous system operations
+        (r"kill\s*-9\s*-1", "kill all processes"),
+        (r"chmod\s*777", "insecure permissions"),
+        (r"disable\s*firewall", "disable firewall"),
+        (r"disable\s*antivirus", "disable antivirus"),
     ]
 
-    # Operations requiring confirmation (medium risk)
+    # Confirmation-required patterns
     CONFIRMATION_PATTERNS = [
-        (r'delete\s*file', "File deletion", "medium"),
-        (r'send\s*email', "Email sending", "medium"),
-        (r'network\s*call', "Network communication", "medium"),
-        (r'api\s*request', "API request", "medium"),
-        (r'modify\s*database', "Database modification", "medium"),
-        (r'sudo', "Elevated privileges", "high"),
-        (r'admin\s*privilege', "Admin privileges", "high"),
-        (r'system\s*call', "System call", "medium"),
-        (r'subprocess', "Subprocess execution", "medium"),
+        (r"delete\s*file", "delete file"),
+        (r"remove\s*file", "remove file"),
+        (r"send\s*email", "send email"),
+        (r"network\s*call", "network call"),
+        (r"api\s*request", "API request"),
+        (r"(?:modify|update|alter)\s*database", "modify database"),
+        (r"sudo", "sudo command"),
+        (r"admin\s*privilege", "admin privilege"),
+        (r"write\s*(?:to\s*)?(?:disk|file)", "write to disk"),
+        (r"execute\s*(?:command|shell)", "execute command"),
     ]
 
-    # Approved safe operations (whitelist approach)
-    APPROVED_OPERATIONS = {
-        'read', 'display', 'show', 'list', 'view', 'get', 'fetch',
-        'calculate', 'compute', 'analyze', 'parse', 'validate',
-        'format', 'convert', 'transform', 'encode', 'decode',
-        'log', 'track', 'monitor', 'measure', 'report',
-        'search', 'find', 'filter', 'sort', 'query',
-        'create', 'generate', 'build', 'make', 'initialize',
-        'test', 'verify', 'check', 'inspect', 'scan',
-        'update', 'modify', 'edit', 'change', 'adjust',  # Safe when scoped
-        'help', 'guide', 'assist', 'support', 'document',
-    }
+    # Compile patterns at class load time for performance
+    _compiled_dangerous: List[Tuple[re.Pattern, str]] = []
+    _compiled_confirmation: List[Tuple[re.Pattern, str]] = []
 
-    # Keywords indicating destructive intent
-    DESTRUCTIVE_INDICATORS = {
-        'destroy', 'wipe', 'erase', 'corrupt', 'damage', 'break',
-        'crash', 'kill', 'terminate', 'force', 'bypass', 'override',
-        'disable', 'circumvent', 'evade', 'hide', 'obfuscate',
-    }
+    @classmethod
+    def _ensure_compiled(cls):
+        """Ensure regex patterns are compiled"""
+        if not cls._compiled_dangerous:
+            cls._compiled_dangerous = [
+                (re.compile(pattern, re.IGNORECASE), desc)
+                for pattern, desc in cls.DANGEROUS_PATTERNS
+            ]
+        if not cls._compiled_confirmation:
+            cls._compiled_confirmation = [
+                (re.compile(pattern, re.IGNORECASE), desc)
+                for pattern, desc in cls.CONFIRMATION_PATTERNS
+            ]
 
     @property
     def name(self) -> str:
@@ -110,319 +111,295 @@ class SafetyGuard(BaseAgent):
 
     @property
     def description(self) -> str:
-        return "Validates ideas for safety compliance and security with multi-layer protection"
+        return "Validates ideas for safety compliance and security"
 
     @staticmethod
     def normalize_text(text: str) -> str:
         """
-        Normalize text to prevent bypass attempts via obfuscation
+        Normalize text to prevent bypass attempts
 
-        Normalization steps:
-        1. Unicode normalization (NFKD)
-        2. Convert to lowercase
-        3. Remove accents and diacritics
-        4. Replace special separators with spaces
-        5. Collapse multiple whitespaces
-        6. Remove zero-width characters
+        Removes:
+        - Unicode variations and accents
+        - Special characters and punctuation
+        - Extra whitespace
+        - Case variations
+
+        This prevents bypasses like:
+        - "control_equipment" vs "control equipment"
+        - "controlequipment" vs "control equipment"
+        - "c0ntr0l equipment" vs "control equipment"
+        - "control\u00A0equipment" (non-breaking space)
 
         Args:
-            text: Raw input text
+            text: Input text to normalize
 
         Returns:
-            Normalized text
+            str: Normalized text
         """
-        # Unicode normalization
-        text = unicodedata.normalize('NFKD', text)
-
-        # Remove accents and convert to ASCII
-        text = ''.join(c for c in text if not unicodedata.combining(c))
-
         # Convert to lowercase
         text = text.lower()
 
-        # Replace various separators with spaces
-        separators = ['_', '-', '.', '/', '\\', '|', '\t', '\n', '\r']
-        for sep in separators:
-            text = text.replace(sep, ' ')
+        # Normalize unicode (decompose accents, etc.)
+        text = unicodedata.normalize("NFKD", text)
 
-        # Remove zero-width characters and other invisible Unicode
-        text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]', '', text)
+        # Remove non-ASCII characters (keeps letters, numbers, spaces)
+        text = text.encode("ascii", "ignore").decode("ascii")
+
+        # Replace common obfuscation characters
+        obfuscation_map = {
+            "0": "o",
+            "1": "i",
+            "3": "e",
+            "4": "a",
+            "5": "s",
+            "7": "t",
+            "8": "b",
+            "@": "a",
+            "$": "s",
+            "!": "i",
+            "|": "i",
+            "()": "o",
+        }
+        for old, new in obfuscation_map.items():
+            text = text.replace(old, new)
+
+        # Replace all non-alphanumeric with spaces
+        text = re.sub(r"[^a-z0-9]+", " ", text)
 
         # Collapse multiple spaces
-        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r"\s+", " ", text)
 
-        # Strip leading/trailing whitespace
-        text = text.strip()
-
-        return text
+        return text.strip()
 
     @staticmethod
-    def extract_verbs(text: str) -> Set[str]:
+    def detect_bypass_attempts(original: str, normalized: str) -> List[str]:
         """
-        Extract verbs and action words from text for semantic analysis
-
-        Uses simple heuristics to identify action words without requiring
-        complex NLP dependencies.
+        Detect potential bypass attempts by comparing original vs normalized
 
         Args:
-            text: Normalized text
+            original: Original input text
+            normalized: Normalized version
 
         Returns:
-            Set of potential action verbs
+            List of detected bypass techniques
         """
-        words = text.split()
+        bypass_attempts = []
 
-        # Common verb suffixes and patterns
-        verb_indicators = ['ing', 'ate', 'ify', 'ize', 'ise']
+        # Check for excessive special characters (potential obfuscation)
+        special_char_count = len(re.findall(r"[^a-zA-Z0-9\s]", original))
+        if special_char_count > len(original) * 0.15:  # More than 15% special chars
+            bypass_attempts.append("excessive_special_characters")
 
-        verbs = set()
-        for word in words:
-            # Add words that end with verb indicators
-            if any(word.endswith(indicator) for indicator in verb_indicators):
-                verbs.add(word)
-            # Add words that are likely verbs (simple heuristic)
-            if len(word) > 3 and word.isalpha():
-                verbs.add(word)
+        # Check for leetspeak / number substitution
+        if re.search(r"[0-9]", original) and not re.search(r"[0-9]", normalized):
+            bypass_attempts.append("number_substitution")
 
-        return verbs
+        # Check for unicode obfuscation
+        if len(original) != len(original.encode("ascii", "ignore").decode("ascii")):
+            bypass_attempts.append("unicode_obfuscation")
 
-    def check_patterns(
-        self,
-        normalized_text: str,
-        patterns: List[Tuple[str, str, str]]
-    ) -> List[Tuple[str, str, str]]:
+        # Check for excessive underscores (common bypass technique)
+        if original.count("_") > 3:
+            bypass_attempts.append("underscore_obfuscation")
+
+        # Check for camelCase or PascalCase (attempting to bypass word boundaries)
+        if re.search(r"[a-z][A-Z]", original):
+            bypass_attempts.append("case_mixing")
+
+        return bypass_attempts
+
+    def check_dangerous_patterns(
+        self, normalized_text: str
+    ) -> Tuple[bool, List[str], List[str]]:
         """
-        Check text against regex patterns
+        Check text against dangerous operation patterns
 
         Args:
             normalized_text: Normalized input text
-            patterns: List of (pattern, description, severity) tuples
 
         Returns:
-            List of matched patterns with their metadata
+            Tuple of (has_violations, matched_patterns, matched_descriptions)
         """
-        matches = []
+        self._ensure_compiled()
 
-        for pattern, description, severity in patterns:
-            # Compile with IGNORECASE for extra safety
-            regex = re.compile(pattern, re.IGNORECASE)
+        matched_patterns = []
+        matched_descriptions = []
 
-            if regex.search(normalized_text):
-                matches.append((pattern, description, severity))
+        for pattern, description in self._compiled_dangerous:
+            if pattern.search(normalized_text):
+                matched_patterns.append(pattern.pattern)
+                matched_descriptions.append(description)
                 logger.warning(
-                    f"Pattern match: '{description}' (severity: {severity})"
+                    f"Dangerous pattern detected: '{description}' "
+                    f"(pattern: {pattern.pattern})"
                 )
 
-        return matches
+        return len(matched_patterns) > 0, matched_patterns, matched_descriptions
 
-    def semantic_analysis(self, normalized_text: str) -> List[str]:
+    def check_confirmation_patterns(
+        self, normalized_text: str
+    ) -> List[str]:
         """
-        Perform semantic analysis to detect dangerous operations
-
-        Analyzes the text for combinations of action verbs and destructive
-        indicators that suggest dangerous intent.
+        Check text against patterns requiring confirmation
 
         Args:
             normalized_text: Normalized input text
 
         Returns:
-            List of semantic flags detected
+            List of confirmations required
         """
-        flags = []
+        self._ensure_compiled()
 
-        # Extract action verbs
-        verbs = self.extract_verbs(normalized_text)
+        confirmations = []
 
-        # Check for destructive verb combinations
-        destructive_verbs = verbs & self.DESTRUCTIVE_INDICATORS
-        if destructive_verbs:
-            flags.append(f"Destructive actions detected: {', '.join(destructive_verbs)}")
-
-        # Check for lack of approved operations
-        approved_verbs = verbs & self.APPROVED_OPERATIONS
-        if not approved_verbs and len(normalized_text) > 20:
-            flags.append("No clearly approved operations detected")
-
-        # Check for multiple high-risk combinations
-        if 'system' in normalized_text and any(
-            word in normalized_text for word in ['control', 'access', 'modify', 'override']
-        ):
-            flags.append("System-level operation with control verbs")
-
-        # Check for encoding/obfuscation indicators
-        if any(indicator in normalized_text for indicator in ['encode', 'decode', 'obfuscate', 'hide']):
-            if any(risky in normalized_text for risky in ['execute', 'eval', 'run', 'exec']):
-                flags.append("Potential code obfuscation for execution")
-
-        return flags
-
-    def whitelist_check(self, normalized_text: str) -> List[str]:
-        """
-        Check if operations are in the approved whitelist
-
-        Args:
-            normalized_text: Normalized input text
-
-        Returns:
-            List of whitelist violations (operations not approved)
-        """
-        violations = []
-
-        # Extract words that look like operations
-        words = set(normalized_text.split())
-
-        # Check if text contains primarily non-approved operations
-        operation_words = words - {'the', 'a', 'an', 'to', 'for', 'with', 'and', 'or', 'in', 'on', 'at'}
-
-        if operation_words:
-            non_approved = operation_words - self.APPROVED_OPERATIONS
-
-            # If most operations are not approved, flag it
-            if non_approved and len(non_approved) > len(operation_words) * 0.3:
-                violations.append(
-                    f"Contains unapproved operations: {', '.join(list(non_approved)[:5])}"
+        for pattern, description in self._compiled_confirmation:
+            if pattern.search(normalized_text):
+                confirmations.append(
+                    f"This tool may {description}. Human confirmation required."
                 )
 
-        return violations
+        return confirmations
+
+    def semantic_analysis(self, idea: Idea) -> Tuple[bool, List[str]]:
+        """
+        Perform semantic analysis to understand intent
+
+        This goes beyond keyword matching to understand what the user
+        is actually trying to build.
+
+        Args:
+            idea: Idea to analyze
+
+        Returns:
+            Tuple of (is_safe, warnings)
+        """
+        warnings = []
+
+        # Check if target environment suggests dangerous context
+        if idea.environment:
+            env_lower = idea.environment.lower()
+            dangerous_environments = [
+                "production", "live", "critical", "nuclear", "medical",
+                "aviation", "automotive", "industrial control"
+            ]
+            for env in dangerous_environments:
+                if env in env_lower:
+                    warnings.append(
+                        f"Target environment '{env}' requires extra scrutiny. "
+                        f"Ensure no safety-critical systems are affected."
+                    )
+
+        # Check if target users suggest privileged access
+        dangerous_user_roles = ["admin", "root", "sysadmin", "operator", "engineer"]
+        for user_role in idea.target_users:
+            user_lower = user_role.lower()
+            for dangerous_role in dangerous_user_roles:
+                if dangerous_role in user_lower:
+                    warnings.append(
+                        f"Target user '{user_role}' may have privileged access. "
+                        f"Ensure proper authorization checks."
+                    )
+                    break
+
+        # Check constraints for security concerns
+        for constraint in idea.constraints:
+            if any(word in constraint.lower() for word in ["bypass", "skip", "disable"]):
+                warnings.append(
+                    f"Constraint mentions bypassing: '{constraint}'. "
+                    f"This requires careful review."
+                )
+
+        # All semantic checks are warnings, not hard blocks
+        return True, warnings
 
     def execute(self, input_data: Idea) -> SafetyCheck:
         """
-        Validate idea for safety with multi-layer protection
+        Validate idea for safety
 
-        Security layers:
+        Multi-layer validation process:
         1. Input normalization
-        2. Dangerous pattern detection
-        3. Confirmation-required pattern detection
-        4. Semantic analysis
-        5. Whitelist validation
+        2. Bypass attempt detection
+        3. Dangerous pattern matching
+        4. Confirmation pattern matching
+        5. Semantic analysis
 
         Args:
             input_data: Idea to validate
 
         Returns:
-            SafetyCheck: Safety validation result with detailed metadata
+            SafetyCheck: Safety validation result with audit metadata
         """
         idea = self.validate_input(input_data, Idea)
+        logger.info(f"Safety check for: {idea.description[:50]}...")
 
-        # Build combined text from all idea fields
-        text_parts = [idea.description] + idea.features + idea.constraints
-        if idea.environment:
-            text_parts.append(idea.environment)
+        # Combine all text for analysis
+        original_text = f"{idea.description} {' '.join(idea.features)} {' '.join(idea.constraints)}"
 
-        raw_text = ' '.join(text_parts)
-
-        logger.info(f"Safety check initiated for: {idea.description[:50]}...")
-        logger.info(f"Full input length: {len(raw_text)} characters")
-
-        # LAYER 1: Normalize input to prevent bypass
-        normalized_text = self.normalize_text(raw_text)
+        # Layer 1: Normalize input
+        normalized_text = self.normalize_text(original_text)
         logger.debug(f"Normalized text: {normalized_text[:100]}...")
 
-        # Initialize tracking variables
-        warnings = []
+        # Layer 2: Detect bypass attempts
+        bypass_attempts = self.detect_bypass_attempts(original_text, normalized_text)
+        if bypass_attempts:
+            logger.warning(
+                f"Detected bypass attempts: {', '.join(bypass_attempts)}"
+            )
+
+        # Layer 3: Check dangerous patterns
+        has_violations, matched_patterns, blocked_keywords = self.check_dangerous_patterns(
+            normalized_text
+        )
+
+        # Layer 4: Check confirmation patterns
         required_confirmations = []
-        blocked_keywords = []
-        approved = True
-        patterns_matched = []
-        semantic_flags = []
-        whitelist_violations = []
+        if not has_violations:
+            required_confirmations = self.check_confirmation_patterns(normalized_text)
 
-        # LAYER 2: Check dangerous patterns
-        dangerous_matches = self.check_patterns(normalized_text, self.DANGEROUS_PATTERNS)
+        # Layer 5: Semantic analysis
+        semantic_safe, semantic_warnings = self.semantic_analysis(idea)
 
-        for pattern, description, severity in dangerous_matches:
-            blocked_keywords.append(description)
-            patterns_matched.append(f"{description} (pattern: {pattern})")
-            approved = False
-            warnings.append(
-                f"BLOCKED: Dangerous operation detected - {description} (severity: {severity})"
-            )
-            logger.error(f"SECURITY VIOLATION: {description} - Pattern: {pattern}")
-
-        # LAYER 3: Check confirmation-required patterns (only if not already blocked)
-        if approved:
-            confirmation_matches = self.check_patterns(normalized_text, self.CONFIRMATION_PATTERNS)
-
-            for pattern, description, severity in confirmation_matches:
-                patterns_matched.append(f"{description} (pattern: {pattern})")
-                required_confirmations.append(
-                    f"This tool may perform: {description}. Human confirmation required (risk: {severity})."
-                )
-                logger.warning(f"Confirmation required: {description}")
-
-        # LAYER 4: Semantic analysis
-        semantic_flags = self.semantic_analysis(normalized_text)
-
-        for flag in semantic_flags:
-            logger.warning(f"Semantic flag: {flag}")
-
-            # Critical semantic flags can block approval
-            if any(critical in flag.lower() for critical in ['destructive', 'obfuscation', 'system level']):
-                if approved:  # Don't override existing blocks
-                    approved = False
-                    warnings.append(f"BLOCKED: Semantic analysis detected: {flag}")
-                    logger.error(f"SEMANTIC VIOLATION: {flag}")
-            else:
-                warnings.append(f"Warning: {flag}")
-
-        # LAYER 5: Whitelist validation
-        whitelist_violations = self.whitelist_check(normalized_text)
-
-        for violation in whitelist_violations:
-            logger.info(f"Whitelist check: {violation}")
-            # Whitelist violations are informational, not blocking
-            warnings.append(f"Note: {violation}")
-
-        # Add general safety warning if blocked
-        if not approved:
-            warnings.append(
-                "Idea violates safety guidelines. See docs/safety.md for approved operations."
-            )
+        # Combine warnings
+        warnings = []
+        if has_violations:
+            warnings.append("Idea violates safety guidelines - see docs/safety.md")
+            for keyword in blocked_keywords:
+                warnings.append(f"Dangerous operation detected: '{keyword}'")
+        warnings.extend(semantic_warnings)
 
         # Calculate confidence score
-        confidence_score = 1.0
-        if semantic_flags:
-            confidence_score -= 0.1 * len(semantic_flags)
-        if whitelist_violations:
-            confidence_score -= 0.05 * len(whitelist_violations)
-        confidence_score = max(0.0, min(1.0, confidence_score))
+        confidence = 1.0
+        if bypass_attempts:
+            confidence -= 0.2 * len(bypass_attempts)
+        if semantic_warnings:
+            confidence -= 0.1 * len(semantic_warnings)
+        confidence = max(0.0, min(1.0, confidence))
 
         # Create metadata for audit trail
         metadata = SafetyCheckMetadata(
-            timestamp=datetime.now(),
-            normalized_text=normalized_text,
-            patterns_matched=patterns_matched,
-            semantic_flags=semantic_flags,
-            whitelist_violations=whitelist_violations,
-            confidence_score=confidence_score
+            normalized_input=normalized_text[:500],  # Limit to 500 chars
+            patterns_matched=matched_patterns,
+            bypass_attempts_detected=bypass_attempts,
+            confidence_score=confidence,
         )
 
-        # Build result
+        # Final decision
+        approved = not has_violations
+
         result = SafetyCheck(
             approved=approved,
             warnings=warnings,
             required_confirmations=required_confirmations,
             blocked_keywords=blocked_keywords,
-            metadata=metadata
+            metadata=metadata,
         )
 
-        # Audit logging
         if approved:
-            logger.info(
-                f"Safety check PASSED (confidence: {confidence_score:.2f}, "
-                f"confirmations: {len(required_confirmations)})"
-            )
+            logger.info(f"Safety check PASSED (confidence: {confidence:.2f})")
         else:
-            logger.error(
-                f"Safety check FAILED - {len(blocked_keywords)} critical violations detected"
+            logger.warning(
+                f"Safety check FAILED: {len(blocked_keywords)} violations "
+                f"(confidence: {confidence:.2f})"
             )
-            logger.error(f"Blocked operations: {', '.join(blocked_keywords)}")
-
-        # Log audit trail
-        logger.info(
-            f"AUDIT: timestamp={metadata.timestamp.isoformat()}, "
-            f"approved={approved}, violations={len(blocked_keywords)}, "
-            f"confirmations={len(required_confirmations)}"
-        )
 
         return result

@@ -4,7 +4,6 @@ Main CLI entry point for the Code Factory
 Provides commands to initialize, check status, and run the factory.
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -18,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from code_factory import __version__
 from code_factory.core.agent_runtime import AgentRuntime
-from code_factory.core.config import get_config
+from code_factory.core.config import get_config, load_config
 from code_factory.core.orchestrator import Orchestrator
 from code_factory.agents.planner import PlannerAgent
 from code_factory.agents.architect import ArchitectAgent
@@ -55,22 +54,15 @@ def get_runtime() -> AgentRuntime:
 
 
 @app.command()
-def init(
-    projects_dir: Optional[str] = typer.Option(
-        None,
-        "--projects-dir",
-        "-d",
-        help="Override the projects directory path"
-    )
-):
+def init():
     """
     Initialize or verify the factory environment
-
+    
     Checks that Python version, directories, and configuration are correct.
     Creates any missing directories or files.
     """
     console.print("\n[bold blue]Initializing Code Factory...[/bold blue]\n")
-
+    
     # Check Python version
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     if sys.version_info < (3, 11):
@@ -78,7 +70,7 @@ def init(
         raise typer.Exit(1)
     else:
         console.print(f"[green]✓[/green] Python {py_version}")
-
+    
     # Check project structure
     project_root = Path(__file__).parent.parent.parent.parent
     required_dirs = [
@@ -90,7 +82,7 @@ def init(
         "tests/integration",
         "tests/e2e"
     ]
-
+    
     all_present = True
     for dir_path in required_dirs:
         full_path = project_root / dir_path
@@ -99,41 +91,14 @@ def init(
         else:
             console.print(f"[red]✗[/red] {dir_path} (missing)")
             all_present = False
-
+    
     # Check Git
     git_dir = project_root / ".git"
     if git_dir.exists():
         console.print(f"[green]✓[/green] Git repository initialized")
     else:
         console.print(f"[yellow]![/yellow] Git not initialized")
-
-    # Initialize and check projects directory
-    console.print()
-    console.print("[bold cyan]Projects Directory Configuration:[/bold cyan]")
-
-    config = get_config()
-    if projects_dir:
-        config.set_projects_dir(projects_dir)
-
-    projects_path = config.projects_dir
-    console.print(f"  Location: {projects_path}")
-
-    # Show configuration source
-    if projects_dir:
-        console.print(f"  Source: CLI flag (--projects-dir)")
-    elif os.getenv(config.ENV_PROJECTS_DIR):
-        console.print(f"  Source: Environment variable ({config.ENV_PROJECTS_DIR})")
-    else:
-        console.print(f"  Source: Default")
-
-    # Create projects directory if it doesn't exist
-    try:
-        config.ensure_projects_dir()
-        console.print(f"[green]✓[/green] Projects directory ready")
-    except OSError as e:
-        console.print(f"[red]✗[/red] Failed to create projects directory: {e}")
-        all_present = False
-
+    
     # Summary
     console.print()
     if all_present:
@@ -142,62 +107,39 @@ def init(
         console.print("[bold yellow]⚠️  Some components are missing[/bold yellow]")
         console.print("Please ensure all directories are present.")
 
-    # Show configuration tips
-    console.print("\n[bold cyan]Configuration Tips:[/bold cyan]")
-    console.print(f"  • Set projects directory via environment:")
-    console.print(f"    export {config.ENV_PROJECTS_DIR}=/path/to/projects")
-    console.print(f"  • Or use the --projects-dir flag with commands")
-    console.print(f"  • Current projects directory: {projects_path}")
-
 
 @app.command()
-def status(
-    projects_dir: Optional[str] = typer.Option(
-        None,
-        "--projects-dir",
-        "-d",
-        help="Override the projects directory path"
-    )
-):
+def status():
     """
     Display current factory status and environment info
-
+    
     Shows Python version, Git status, available agents, and system information.
     """
     console.print(f"\n[bold]Agent-Orchestrated Code Factory v{__version__}[/bold]")
     console.print("=" * 60 + "\n")
-
+    
     # Environment section
     console.print("[bold cyan]Environment:[/bold cyan]")
     py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     py_path = sys.executable
     console.print(f"  Python: {py_version} ({py_path})")
-
+    
     project_root = Path(__file__).parent.parent.parent.parent
     console.print(f"  Working Directory: {project_root}")
-
+    
     # Git status
     git_dir = project_root / ".git"
     if git_dir.exists():
         console.print(f"  Git: Initialized ✓")
     else:
         console.print(f"  Git: Not initialized")
-
-    # Projects directory - use config system
+    
+    # Configuration
     config = get_config()
-    if projects_dir:
-        config.set_projects_dir(projects_dir)
-
-    projects_path = config.projects_dir
-    projects_source = "CLI flag" if projects_dir else (
-        "Environment" if os.getenv(config.ENV_PROJECTS_DIR) else "Default"
-    )
-
-    if projects_path.exists():
-        console.print(f"  Projects Directory: {projects_path} ✓ ({projects_source})")
-    else:
-        console.print(f"  Projects Directory: {projects_path} (not found, {projects_source})")
-
+    console.print(f"  Projects Directory: {config.projects_dir}")
+    console.print(f"  Checkpoint Directory: {config.checkpoint_dir}")
+    console.print(f"  Agent Timeout: {config.default_agent_timeout}s")
+    
     console.print()
     
     # Agents section

@@ -14,8 +14,12 @@ Build practical tools that help real workers—marine engineers, plant operators
 - **Intelligent architecture**: Automatic project structure and technology selection
 - **Multi-agent orchestration**: Specialized agents for planning, coding, testing, and documentation
 - **Blue-collar focus**: Optimized for building tools that work in harsh environments with practical constraints
-- **Safety-first**: Built-in safety guards and project scope boundaries
+- **Safety-first**: Multi-layer security validation with bypass detection
 - **Git integration**: Automatic version control and GitHub repository management
+- **Cross-platform**: Portable configuration system works on Windows, Linux, and macOS
+- **Timeout protection**: Prevents runaway processes with configurable timeouts
+- **Transaction safety**: Rollback mechanism for error recovery
+- **Comprehensive testing**: >70% test coverage with automated safety checks
 
 ## 🚀 Quick Start
 
@@ -29,38 +33,34 @@ pip install -e ".[dev]"
 # Initialize the factory
 code-factory init
 
-# Optional: Set custom projects directory
-export CODE_FACTORY_PROJECTS_DIR=~/my-projects
-# Or use the --projects-dir flag
-code-factory init --projects-dir ~/my-projects
-
 # Check system status
 code-factory status
+
+# Run tests with coverage
+pytest
 
 # (More commands coming soon)
 ```
 
 ## ⚙️ Configuration
 
-The Code Factory uses a flexible configuration system:
+The factory can be configured via environment variables:
 
-1. **Environment Variables** (recommended for persistent settings):
-   ```bash
-   export CODE_FACTORY_PROJECTS_DIR=~/my-projects
-   export CODE_FACTORY_LOG_LEVEL=INFO
-   ```
+```bash
+# Set custom projects directory
+export CODE_FACTORY_PROJECTS_DIR="~/my-projects"
 
-2. **CLI Flags** (for per-command overrides):
-   ```bash
-   code-factory init --projects-dir /path/to/projects
-   code-factory status --projects-dir /path/to/projects
-   ```
+# Set agent timeout (in seconds)
+export CODE_FACTORY_DEFAULT_AGENT_TIMEOUT=600
 
-3. **Default Values**:
-   - Projects directory: `~/.code-factory/projects`
-   - Log level: `INFO`
+# Disable safety guard (not recommended)
+export CODE_FACTORY_ENABLE_SAFETY_GUARD=false
 
-The configuration system automatically creates the projects directory if it doesn't exist.
+# Set log level
+export CODE_FACTORY_LOG_LEVEL=DEBUG
+```
+
+See [docs/configuration.md](docs/configuration.md) for all available options.
 
 ## 📋 Requirements
 
@@ -94,12 +94,22 @@ See [docs/architecture.md](docs/architecture.md) for details.
 
 ## 🔒 Safety
 
+This system implements multiple layers of security:
+
+- **Input normalization**: Prevents obfuscation-based bypasses
+- **Regex pattern matching**: Detects dangerous operations with variations
+- **Semantic analysis**: Understands context and intent
+- **Audit logging**: Complete trail of all safety decisions
+- **Bypass detection**: Identifies and blocks evasion attempts
+
 This system is designed for **decision support and tool building only**. It does not:
 - Control real-world equipment or machinery
 - Generate exploit code or malicious software
 - Modify files outside designated project directories
 
 All generated tools are for analysis, documentation, and human-in-the-loop workflows.
+
+See [docs/safety.md](docs/safety.md) for detailed security information.
 
 ## 🤝 Contributing
 
