@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from code_factory.core.agent_runtime import AgentRuntime
+from code_factory.core.config import get_config
 from code_factory.core.models import Idea, ProjectResult, ProjectSpec, Task
 
 logger = logging.getLogger(__name__)
@@ -27,16 +28,26 @@ class Orchestrator:
     into a complete project.
     """
     
-    def __init__(self, runtime: AgentRuntime, projects_dir: str = "/Users/dp/Projects"):
+    def __init__(self, runtime: AgentRuntime, projects_dir: Optional[str] = None):
         """
         Initialize the orchestrator
-        
+
         Args:
             runtime: AgentRuntime with registered agents
-            projects_dir: Root directory for generated projects
+            projects_dir: Optional root directory for generated projects.
+                         If not provided, uses configuration system:
+                         1. CODE_FACTORY_PROJECTS_DIR environment variable
+                         2. Default: ~/.code-factory/projects
         """
         self.runtime = runtime
-        self.projects_dir = Path(projects_dir)
+
+        # Use provided path or fall back to config
+        if projects_dir:
+            self.projects_dir = Path(projects_dir).expanduser().resolve()
+        else:
+            config = get_config()
+            self.projects_dir = config.projects_dir
+
         self._current_run: Optional[ProjectResult] = None
     
     def run_factory(self, idea: Idea) -> ProjectResult:
