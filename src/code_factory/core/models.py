@@ -154,10 +154,38 @@ class AgentRun(BaseModel):
     duration_seconds: Optional[float] = None
 
 
+class SafetyCheckMetadata(BaseModel):
+    """
+    Detailed metadata about a safety check execution
+
+    Provides audit trail and transparency into the safety validation process.
+    """
+    timestamp: datetime = Field(default_factory=datetime.now)
+    normalized_text: str = Field(..., description="Normalized input text used for checking")
+    patterns_matched: List[str] = Field(
+        default_factory=list,
+        description="Specific patterns that matched (for audit)"
+    )
+    semantic_flags: List[str] = Field(
+        default_factory=list,
+        description="Semantic analysis flags detected"
+    )
+    whitelist_violations: List[str] = Field(
+        default_factory=list,
+        description="Operations not in approved whitelist"
+    )
+    confidence_score: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in the safety decision (0-1)"
+    )
+
+
 class SafetyCheck(BaseModel):
     """
     Result of safety validation
-    
+
     Output of SafetyGuard agent indicating whether an idea is safe
     to proceed with, and any warnings or confirmations needed.
     """
@@ -173,6 +201,10 @@ class SafetyCheck(BaseModel):
     blocked_keywords: List[str] = Field(
         default_factory=list,
         description="Dangerous keywords found in idea"
+    )
+    metadata: Optional[SafetyCheckMetadata] = Field(
+        None,
+        description="Detailed metadata about the safety check"
     )
 
 
