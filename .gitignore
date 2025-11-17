@@ -56,3 +56,4 @@ secrets/
 # Generated projects (except examples)
 generated_projects/
 !generated_projects/.gitkeep
+coverage.xml

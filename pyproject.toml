@@ -39,20 +39,27 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--cov=code_factory",
-    "--cov-report=html",
     "--cov-report=term-missing",
-    "--cov-fail-under=70",
-    "-v"
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-fail-under=80",
 ]
 
 [tool.coverage.run]
-source = ["src/code_factory"]
+source = ["code_factory"]
 omit = [
     "*/tests/*",
-    "*/__init__.py",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
 ]
+branch = true
 
 [tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+fail_under = 80
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -60,5 +67,9 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
-    "@abstractmethod",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
 ]
+
+[tool.coverage.html]
+directory = "htmlcov"
