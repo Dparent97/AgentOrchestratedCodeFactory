@@ -16,8 +16,21 @@ from typing import Optional, List
 from code_factory.core.agent_runtime import AgentRuntime
 from code_factory.core.checkpoint import CheckpointManager, Checkpoint
 from code_factory.core.config import FactoryConfig, get_config
-from code_factory.core.models import Idea, ProjectResult, ProjectSpec, Task, AgentRun
+from code_factory.core.models import (
+    Idea,
+    ProjectResult,
+    ProjectSpec,
+    Task,
+    AgentRun,
+    SafetyCheck,
+    PlanResult,
+    ArchitectResult,
+)
 from code_factory.core.transaction import Transaction
+from code_factory.agents.architect import ArchitectInput
+from code_factory.agents.tester import TestInput
+from code_factory.agents.git_ops import GitOperation
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -77,45 +90,88 @@ class Orchestrator:
             agent_runs=[],
             errors=[]
         )
-        
+
         try:
             # Stage 1: Safety validation
             logger.info("Stage 1: Safety validation")
-            # TODO: Implement safety check
-            # safety_run = self.runtime.execute_agent("safety_guard", idea)
-            # result.agent_runs.append(safety_run)
-            
+            safety_run = self.runtime.execute_agent("safety_guard", idea)
+            result.agent_runs.append(safety_run)
+
+            if safety_run.status != "success":
+                raise RuntimeError(f"Safety check failed: {safety_run.error}")
+
+            safety_check = SafetyCheck(**safety_run.output_data)
+            if not safety_check.approved:
+                raise RuntimeError(f"Idea rejected by safety guard: {safety_check.blocked_keywords}")
+
             # Stage 2: Planning
             logger.info("Stage 2: Planning tasks")
-            # TODO: Implement task planning
-            # planner_run = self.runtime.execute_agent("planner", idea)
-            # result.agent_runs.append(planner_run)
-            
+            planner_run = self.runtime.execute_agent("planner", idea)
+            result.agent_runs.append(planner_run)
+
+            if planner_run.status != "success":
+                raise RuntimeError(f"Planning failed: {planner_run.error}")
+
+            plan_result = PlanResult(**planner_run.output_data)
+            tasks = plan_result.tasks
+
             # Stage 3: Architecture design
             logger.info("Stage 3: Architecture design")
-            # TODO: Implement architecture design
-            # architect_run = self.runtime.execute_agent("architect", ...)
-            # result.agent_runs.append(architect_run)
-            
+            architect_input = ArchitectInput(idea=idea, tasks=tasks)
+            architect_run = self.runtime.execute_agent("architect", architect_input)
+            result.agent_runs.append(architect_run)
+
+            if architect_run.status != "success":
+                raise RuntimeError(f"Architecture design failed: {architect_run.error}")
+
+            architect_result = ArchitectResult(**architect_run.output_data)
+            project_spec = architect_result.spec
+            result.project_name = project_spec.name
+
             # Stage 4: Implementation
             logger.info("Stage 4: Code implementation")
-            # TODO: Implement code generation
-            
+            implementer_run = self.runtime.execute_agent("implementer", project_spec)
+            result.agent_runs.append(implementer_run)
+
+            if implementer_run.status != "success":
+                raise RuntimeError(f"Code implementation failed: {implementer_run.error}")
+
+            code_files = implementer_run.output_data.get("files", {})
+
             # Stage 5: Testing
             logger.info("Stage 5: Test generation")
-            # TODO: Implement test generation
-            
+            test_input = TestInput(spec=project_spec, code_files=code_files)
+            tester_run = self.runtime.execute_agent("tester", test_input)
+            result.agent_runs.append(tester_run)
+
+            if tester_run.status != "success":
+                logger.warning(f"Test generation had issues: {tester_run.error}")
+
             # Stage 6: Documentation
             logger.info("Stage 6: Documentation")
-            # TODO: Implement documentation generation
-            
+            doc_run = self.runtime.execute_agent("doc_writer", project_spec)
+            result.agent_runs.append(doc_run)
+
+            if doc_run.status != "success":
+                logger.warning(f"Documentation generation had issues: {doc_run.error}")
+
             # Stage 7: Git initialization
             logger.info("Stage 7: Git initialization")
-            # TODO: Implement Git operations
-            
-            # For now, mark as success (will be replaced with real logic)
+            project_path = self.projects_dir / project_spec.name
+            git_op = GitOperation(
+                repo_path=str(project_path),
+                operation="init",
+                message="Initial commit from Code Factory"
+            )
+            git_run = self.runtime.execute_agent("git_ops", git_op)
+            result.agent_runs.append(git_run)
+
+            if git_run.status != "success":
+                logger.warning(f"Git initialization had issues: {git_run.error}")
+
+            # Mark as success
             result.success = True
-            result.project_name = "placeholder"
+            result.project_path = str(project_path)
             
         except Exception as e:
             logger.error(f"Factory run failed: {e}")

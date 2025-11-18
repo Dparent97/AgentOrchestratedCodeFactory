@@ -68,7 +68,7 @@ class PlannerAgent(BaseAgent):
         # Step 2: Create config tasks
         task_counter += 1
         config_task = Task(
-            id=f"task_{task_counter}",
+            id=str(task_counter),
             type=TaskType.CONFIG,
             description="Initialize project structure and configuration",
             dependencies=[],
@@ -82,7 +82,7 @@ class PlannerAgent(BaseAgent):
         if idea.features:
             for feature in idea.features:
                 task_counter += 1
-                task_id = f"task_{task_counter}"
+                task_id = str(task_counter)
                 code_task = Task(
                     id=task_id,
                     type=TaskType.CODE,
@@ -96,7 +96,7 @@ class PlannerAgent(BaseAgent):
         else:
             # Create a single generic code task
             task_counter += 1
-            task_id = f"task_{task_counter}"
+            task_id = str(task_counter)
             code_task = Task(
                 id=task_id,
                 type=TaskType.CODE,
@@ -112,13 +112,13 @@ class PlannerAgent(BaseAgent):
         test_task_ids = []
         for code_task_id in code_task_ids:
             task_counter += 1
-            task_id = f"task_{task_counter}"
+            task_id = str(task_counter)
             test_task = Task(
                 id=task_id,
                 type=TaskType.TEST,
-                description=f"Write unit tests for {code_task_id}",
+                description=f"Write unit tests for task {code_task_id}",
                 dependencies=[code_task_id],
-                files_to_create=[f"tests/test_{code_task_id}.py"],
+                files_to_create=[f"tests/test_task_{code_task_id}.py"],
                 agent="tester"
             )
             tasks.append(test_task)
@@ -127,7 +127,7 @@ class PlannerAgent(BaseAgent):
         # Step 5: Create documentation tasks
         task_counter += 1
         readme_task = Task(
-            id=f"task_{task_counter}",
+            id=str(task_counter),
             type=TaskType.DOC,
             description="Create README documentation",
             dependencies=code_task_ids,  # Depends on all code tasks
@@ -140,7 +140,7 @@ class PlannerAgent(BaseAgent):
         if len(idea.features) >= 3:
             task_counter += 1
             examples_task = Task(
-                id=f"task_{task_counter}",
+                id=str(task_counter),
                 type=TaskType.DOC,
                 description="Create usage examples and tutorials",
                 dependencies=[readme_task.id],
