@@ -19,7 +19,13 @@ from code_factory.agents.planner import PlannerAgent
 from code_factory.agents.safety_guard import SafetyGuard
 from code_factory.agents.tester import TesterAgent, TestInput
 from code_factory.core.agent_runtime import AgentRuntime
-from code_factory.core.models import Idea, ProjectSpec, SafetyCheck
+from code_factory.core.models import (
+    ArchitectResult,
+    Idea,
+    PlanResult,
+    ProjectSpec,
+    SafetyCheck,
+)
 
 
 class TestSafetyToPlannerWorkflow:
@@ -389,6 +395,84 @@ class TestDataFlowValidation:
             assert "description" in task
             assert "dependencies" in task
             assert "status" in task
+
+
+class TestFoundationAgentsIntegration:
+    """Test PlannerAgent + ArchitectAgent integration with new result models"""
+
+    def test_planner_architect_end_to_end(self):
+        """Test complete flow from Idea -> PlanResult -> ArchitectResult"""
+        # Direct agent calls (not through runtime) to test new models
+        planner = PlannerAgent()
+        architect = ArchitectAgent()
+
+        # Step 1: Create idea
+        idea = Idea(
+            description="Marine log analyzer for CSV files",
+            features=["Parse CSV", "Generate reports"],
+            target_users=["marine_engineer"],
+            environment="noisy engine room, limited WiFi"
+        )
+
+        # Step 2: Plan tasks
+        plan_result = planner.execute(idea)
+
+        # Verify PlanResult structure
+        assert isinstance(plan_result, PlanResult)
+        assert len(plan_result.tasks) >= 5  # Should have multiple tasks
+        assert plan_result.estimated_complexity in ["simple", "moderate", "complex"]
+        assert isinstance(plan_result.dependency_graph, dict)
+
+        # Step 3: Design architecture with tasks
+        arch_input = ArchitectInput(idea=idea, tasks=plan_result.tasks)
+        arch_result = architect.execute(arch_input)
+
+        # Verify ArchitectResult structure
+        assert isinstance(arch_result, ArchitectResult)
+        assert isinstance(arch_result.spec, ProjectSpec)
+        assert isinstance(arch_result.rationale, dict)
+        assert 0.0 <= arch_result.blue_collar_score <= 10.0
+        assert isinstance(arch_result.warnings, list)
+
+        # Verify spec details
+        spec = arch_result.spec
+        assert spec.name is not None
+        assert len(spec.tech_stack) > 0
+        assert len(spec.dependencies) > 0
+        assert spec.user_profile == "marine_engineer"
+        assert spec.environment == "noisy engine room, limited WiFi"
+
+        # Verify blue-collar score is reasonable for field tool
+        # CSV parsing, offline = should be high score
+        assert arch_result.blue_collar_score >= 7.0
+
+    def test_planner_architect_integration_via_runtime(self):
+        """Test PlannerAgent -> ArchitectAgent through AgentRuntime"""
+        runtime = AgentRuntime()
+        runtime.register_agent(PlannerAgent())
+        runtime.register_agent(ArchitectAgent())
+
+        idea = Idea(
+            description="Build offline calculator for field workers",
+            features=["basic math", "formula storage"],
+            target_users=["mechanic"]
+        )
+
+        # Execute planner
+        planner_result = runtime.execute_agent("planner", idea)
+        assert planner_result.status == "success"
+
+        # Extract tasks from result
+        tasks_data = planner_result.output_data["tasks"]
+
+        # Execute architect with idea (ArchitectAgent accepts both Idea and ArchitectInput)
+        architect_result = runtime.execute_agent("architect", idea)
+        assert architect_result.status == "success"
+
+        # Verify complete data flow
+        assert "spec" in architect_result.output_data
+        assert "blue_collar_score" in architect_result.output_data
+        assert "rationale" in architect_result.output_data
 
 
 class TestPipelineRobustness:

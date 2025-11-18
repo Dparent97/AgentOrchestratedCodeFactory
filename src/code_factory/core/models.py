@@ -258,107 +258,58 @@ class TestResult(BaseModel):
     success: bool = Field(default=False)
 
 
-class AgentTimeoutError(Exception):
-    """
-    Raised when agent execution exceeds timeout
-
-    This exception is raised when an agent takes longer than the
-    specified timeout to complete its execution. It includes information
-    about the agent and timeout duration for debugging.
-    """
-    def __init__(self, agent_name: str, timeout_seconds: int, message: Optional[str] = None):
-        self.agent_name = agent_name
-        self.timeout_seconds = timeout_seconds
-        default_message = f"Agent '{agent_name}' exceeded timeout of {timeout_seconds} seconds"
-        super().__init__(message or default_message)
-
-
 class PlanResult(BaseModel):
     """
-    Comprehensive planning result from PlannerAgent
+    Result of task planning
 
-    Contains tasks, dependency information, complexity analysis,
-    and planning metadata. This is the intelligent output format
-    that replaces the simple TaskList.
+    Output of PlannerAgent containing tasks, dependency graph,
+    and complexity estimation.
     """
     tasks: List[Task] = Field(..., description="List of tasks to execute")
     dependency_graph: Dict[str, List[str]] = Field(
-        default_factory=dict,
-        description="Explicit dependency graph (task_id -> [dependency_ids])"
+        ...,
+        description="Task dependency mapping (task_id -> list of dependency task_ids)"
     )
     estimated_complexity: str = Field(
-        default="moderate",
-        description="Project complexity estimation: 'simple', 'moderate', or 'complex'"
-    )
-    total_estimated_hours: Optional[float] = Field(
-        None,
-        ge=0.0,
-        description="Rough estimate of total implementation time in hours"
-    )
-    critical_path: List[str] = Field(
-        default_factory=list,
-        description="Task IDs on the critical path (longest dependency chain)"
+        ...,
+        description="Project complexity estimate: 'simple', 'moderate', or 'complex'"
     )
     warnings: List[str] = Field(
         default_factory=list,
-        description="Planning warnings or concerns"
-    )
-    planning_notes: Optional[str] = Field(
-        None,
-        description="Additional notes about the planning process"
+        description="Warnings about the plan (e.g., circular dependencies, missing features)"
     )
 
     @field_validator("estimated_complexity")
     @classmethod
-    def validate_complexity(cls, v: str) -> str:
-        allowed = ["simple", "moderate", "complex"]
-        if v.lower() not in allowed:
-            raise ValueError(f"Complexity must be one of: {allowed}")
-        return v.lower()
+    def complexity_valid(cls, v: str) -> str:
+        valid_levels = ["simple", "moderate", "complex"]
+        if v not in valid_levels:
+            raise ValueError(f"Complexity must be one of {valid_levels}")
+        return v
 
 
 class ArchitectResult(BaseModel):
     """
-    Comprehensive architecture result from ArchitectAgent
+    Result of architectural design
 
-    Contains the project specification, design rationale, blue-collar
-    usability scoring, and architectural metadata. This is the intelligent
-    output format that replaces returning ProjectSpec directly.
+    Output of ArchitectAgent containing project specification,
+    decision rationale, and blue-collar usability score.
     """
-    spec: ProjectSpec = Field(..., description="The complete project specification")
+    spec: ProjectSpec = Field(..., description="Complete project specification")
     rationale: Dict[str, str] = Field(
-        default_factory=dict,
-        description="Design decisions and their reasoning (decision -> reason)"
+        ...,
+        description="Architectural decisions with reasoning (e.g., {'tech_stack': 'Python for simplicity'})"
     )
     blue_collar_score: float = Field(
-        default=5.0,
+        ...,
         ge=0.0,
         le=10.0,
-        description="Field-practical usability score (0-10, higher = more practical)"
-    )
-    design_decisions: List[str] = Field(
-        default_factory=list,
-        description="Key architectural decisions made"
-    )
-    trade_offs: Dict[str, str] = Field(
-        default_factory=dict,
-        description="Trade-offs considered (choice -> alternative)"
+        description="Practicality score for field workers (0-10, higher is better)"
     )
     warnings: List[str] = Field(
         default_factory=list,
-        description="Architectural warnings or concerns"
+        description="Architectural concerns or recommendations"
     )
-    accessibility_considerations: List[str] = Field(
-        default_factory=list,
-        description="Considerations for blue-collar usability"
-    )
-
-    @field_validator("blue_collar_score")
-    @classmethod
-    def validate_score(cls, v: float) -> float:
-        if not 0.0 <= v <= 10.0:
-            raise ValueError("Blue-collar score must be between 0.0 and 10.0")
-        return round(v, 2)
 
 
 class ProjectResult(BaseModel):
