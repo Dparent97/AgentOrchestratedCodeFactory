@@ -1,0 +1,51 @@
+{
+  "project": "example-project",
+  "project_path": "/home/user/example-project",
+  "phase": 4,
+  "iteration": 1,
+  "status": "phase_3_complete",
+  "tech_stack": "Python, FastAPI, PostgreSQL, React",
+  "repo_url": "https://github.com/user/example-project",
+  "agents": [
+    {
+      "id": 1,
+      "role": "Backend Developer",
+      "status": "not_started",
+      "started_at": null,
+      "completed_at": null,
+      "pr_number": null
+    },
+    {
+      "id": 2,
+      "role": "Frontend Developer",
+      "status": "not_started",
+      "started_at": null,
+      "completed_at": null,
+      "pr_number": null
+    },
+    {
+      "id": 3,
+      "role": "QA Engineer",
+      "status": "not_started",
+      "started_at": null,
+      "completed_at": null,
+      "pr_number": null
+    }
+  ],
+  "history": [
+    {
+      "phase": 1,
+      "completed_at": "2025-11-18T09:00:00"
+    },
+    {
+      "phase": 2,
+      "completed_at": "2025-11-18T09:30:00"
+    },
+    {
+      "phase": 3,
+      "completed_at": "2025-11-18T10:00:00"
+    }
+  ],
+  "created_at": "2025-11-18T08:00:00",
+  "last_updated": "2025-11-18T10:00:00"
+}
