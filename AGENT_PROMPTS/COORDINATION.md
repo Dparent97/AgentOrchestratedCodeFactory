@@ -704,5 +704,332 @@ None
 
 ---
 
-*Last Updated: November 17, 2025*
-*Next Update: End of Wave 1 (November 22, 2025)*
+---
+
+## 🔄 Phase 3 Integration Points (November 2025)
+
+**Goal:** Fix critical infrastructure and complete placeholder agent implementations
+
+**Agent Count:** 4 specialized agents
+
+### Integration Overview
+
+```
+Phase 3 Pipeline Flow:
+
+Agent 1: Pipeline Integration
+    ↓ (enables)
+Agent 2: Code Generation  →  Real code files
+    ↓ (uses)
+Agent 3: Git Operations   →  Version control
+    ↓ (documents)
+Agent 4: Testing & Docs   →  Tests + Documentation
+    ↓
+Fully Functional Code Factory
+```
+
+---
+
+### Agent 1: Pipeline Integration Engineer
+
+**Branch:** `claude/fix-pipeline-integration`
+**Priority:** CRITICAL (blocks all others)
+
+**Fixes:**
+1. Broken module imports in `agents/__init__.py`
+2. Disconnected orchestrator pipeline (all 7 stages commented out)
+3. Task ID format mismatch (task_1 vs t1)
+
+**Integration Points:**
+```python
+# OUTPUT → Enables All Other Agents
+- Restored agent imports: from code_factory.agents import PlannerAgent
+- Working pipeline: Orchestrator.run_factory() executes all stages
+- Consistent task IDs: "t1", "t2", etc.
+```
+
+**Unblocks:** Agents 2, 3, 4
+
+---
+
+### Agent 2: Code Generation Engineer
+
+**Branch:** `claude/implement-code-generation`
+**Depends On:** Agent 1 (optional, can work in parallel)
+
+**Implements:**
+- Template-based code generation system
+- Real ImplementerAgent (replaces placeholder)
+- Python CLI and library templates
+- Valid, runnable project code
+
+**Integration Points:**
+```python
+# INPUT (from ArchitectAgent)
+ProjectSpec:
+  - name: str
+  - description: str
+  - tech_stack: Dict[str, str]
+  - folder_structure: Dict[str, List[str]]
+  - dependencies: List[str]
+  - entry_point: str
+
+# OUTPUT → Agent 3, Agent 4
+CodeOutput:
+  - files: Dict[str, str]  # Real Python code
+  - files_created: int
+  - warnings: List[str]
+```
+
+**Example:**
+```python
+# After Agent 2, projects contain:
+src/
+  project_name/
+    main.py          # Working CLI entry point
+    core.py          # Business logic
+    __init__.py
+pyproject.toml       # Full dependencies
+README.md
+.gitignore
+pytest.ini
+```
+
+---
+
+### Agent 3: Git Operations Engineer
+
+**Branch:** `claude/implement-git-operations`
+**Depends On:** Agent 2 (needs real files to commit)
+
+**Implements:**
+- Real Git operations using gitpython
+- Repository creation and initialization
+- Commit at each pipeline stage
+- Remote management (GitHub)
+
+**Integration Points:**
+```python
+# INPUT (from Agent 2 + Orchestrator)
+{
+    "spec": ProjectSpec,
+    "project_dir": Path,
+    "files": Dict[str, str]  # From ImplementerAgent
+}
+
+# OUTPUT
+GitOutput:
+  - repo_created: bool
+  - initial_commit: bool
+  - commit_sha: str
+  - remote_url: str
+  - repo_path: str
+```
+
+**Pipeline Integration:**
+```python
+# In orchestrator.py (Stage 7)
+git_input = {
+    "spec": result.project_spec,
+    "project_dir": output_dir,
+    "files": implementer_output.files
+}
+git_run = self.runtime.execute_agent("git_ops", git_input)
+```
+
+**Features:**
+- Local Git repo creation
+- Staged commits (commit after each pipeline stage)
+- Optional push to GitHub
+- Proper error handling
+
+---
+
+### Agent 4: Testing & Documentation Engineer
+
+**Branch:** `claude/implement-testing-docs`
+**Depends On:** Agent 2 (needs real code to test/document)
+
+**Implements:**
+- TesterAgent: Real pytest test generation
+- DocWriterAgent: Comprehensive documentation
+- Test execution with coverage reporting
+
+**Integration Points:**
+
+#### TesterAgent:
+```python
+# INPUT
+{
+    "spec": ProjectSpec,
+    "project_dir": Path,
+    "run_tests": bool  # Optional: actually run tests
+}
+
+# OUTPUT
+TestOutput:
+  - tests_run: int
+  - tests_passed: int
+  - tests_failed: int
+  - coverage_percent: float
+  - test_files: Dict[str, str]  # Generated test files
+```
+
+#### DocWriterAgent:
+```python
+# INPUT
+{
+    "spec": ProjectSpec
+}
+
+# OUTPUT
+DocOutput:
+  - docs_created: Dict[str, str]  # README, CONTRIBUTING, LICENSE, docs/*
+  - files_created: int
+```
+
+**Generated Files:**
+- `README.md` - Comprehensive with features, usage, examples
+- `CONTRIBUTING.md` - Contribution guidelines
+- `LICENSE` - MIT license
+- `docs/installation.md` - Installation guide
+- `docs/usage.md` - Usage examples
+- `docs/api.md` - API reference
+- `tests/test_*.py` - Pytest test files
+- `tests/conftest.py` - Test fixtures
+- `pytest.ini` - Pytest configuration
+
+---
+
+## 📊 Phase 3 Dependency Graph
+
+```
+Agent 1 (Pipeline Integration) ← START HERE
+    ↓ (enables)
+    ├─→ Agent 2 (Code Generation)
+    │       ↓
+    │       ├─→ Agent 3 (Git Operations)
+    │       │       ↓
+    │       └─→ Agent 4 (Testing & Docs)
+    │               ↓
+    └───────────────┴────→ PHASE 3 COMPLETE
+```
+
+**Critical Path:** 1 → 2 → 3 → 4
+**Can Run in Parallel:** 3 and 4 (both depend on 2 only)
+
+---
+
+## 📁 Phase 3 File Ownership
+
+### Agent 1 Owns:
+- `src/code_factory/agents/__init__.py`
+- `src/code_factory/core/orchestrator.py`
+- `src/code_factory/agents/planner.py` (task ID format)
+- `tests/test_smoke.py` (test expectations)
+- `tests/integration/test_wave1_pipeline.py` (updates)
+
+### Agent 2 Owns:
+- `src/code_factory/templates/` (NEW directory)
+- `src/code_factory/templates/python_cli/*.template` (NEW)
+- `src/code_factory/templates/python_library/*.template` (NEW)
+- `src/code_factory/agents/implementer.py`
+- `tests/unit/test_implementer.py`
+
+### Agent 3 Owns:
+- `src/code_factory/agents/git_ops.py`
+- `src/code_factory/core/models.py` (GitOutput updates)
+- `tests/unit/test_git_ops.py`
+
+### Agent 4 Owns:
+- `src/code_factory/templates/tests/*.template` (NEW)
+- `src/code_factory/templates/docs/*.template` (NEW)
+- `src/code_factory/agents/tester.py`
+- `src/code_factory/agents/doc_writer.py`
+- `src/code_factory/core/models.py` (TestOutput, DocOutput updates)
+- `tests/unit/test_tester.py`
+- `tests/unit/test_doc_writer.py`
+
+**No Conflicts:** Each agent has exclusive file ownership
+
+---
+
+## ✅ Phase 3 Completion Checklist
+
+### Agent 1: Pipeline Integration Engineer
+- [ ] Module imports restored in `__init__.py`
+- [ ] Orchestrator pipeline connected (all 7 stages)
+- [ ] Task ID format standardized
+- [ ] SafetyGuard integrated into pipeline
+- [ ] All tests pass
+- [ ] PR merged
+
+### Agent 2: Code Generation Engineer
+- [ ] Template system implemented
+- [ ] Python CLI templates created
+- [ ] ImplementerAgent generates real code
+- [ ] Generated code is syntactically valid
+- [ ] Tests pass (80%+ coverage)
+- [ ] PR merged
+
+### Agent 3: Git Operations Engineer
+- [ ] GitOpsAgent creates real repositories
+- [ ] Commits work correctly
+- [ ] Remote management implemented
+- [ ] Tests pass
+- [ ] PR merged
+
+### Agent 4: Testing & Documentation Engineer
+- [ ] TesterAgent generates real pytest tests
+- [ ] Test execution and coverage collection works
+- [ ] DocWriterAgent generates comprehensive docs
+- [ ] All documentation files created
+- [ ] Tests pass
+- [ ] PR merged
+
+### Integration Verification
+- [ ] Full pipeline runs end-to-end
+- [ ] `code-factory create "Build CSV parser"` generates complete project
+- [ ] Generated project has: code, tests, docs, Git repo
+- [ ] Generated tests can run: `pytest`
+- [ ] Generated code is installable: `pip install -e .`
+- [ ] All 4 PRs merged to dev branch
+- [ ] Phase 3 iteration complete
+
+---
+
+## 🚀 Phase 3 Success Metrics
+
+**Before Phase 3:**
+- 60% functionality (core agents work, but pipeline broken)
+- 5 of 8 agents return placeholder data
+- Cannot generate working projects
+- Test coverage: 83.81%
+
+**After Phase 3:**
+- 100% core functionality
+- All 8 agents fully implemented
+- Can generate complete, working projects
+- Test coverage: 85%+ (target)
+- Projects include: code, tests, docs, Git repo
+- Generated projects are installable and runnable
+
+**Demo Success:**
+```bash
+code-factory create "Build a CSV log parser for marine equipment"
+
+# Output:
+# ✅ Created project: marine-log-parser/
+#    - Initialized Git repository
+#    - Generated 15 Python files
+#    - Created 8 test files (pytest)
+#    - Generated comprehensive documentation
+#    - Test coverage: 78%
+#    - All tests passing
+#    - Ready to install: pip install -e marine-log-parser/
+```
+
+---
+
+*Last Updated: November 18, 2025 - Phase 3*
+*Previous Update: November 17, 2025 - Wave 1*
