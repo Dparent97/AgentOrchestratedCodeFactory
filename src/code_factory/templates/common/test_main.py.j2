@@ -1,0 +1,67 @@
+"""
+Tests for {{ project_name }}
+
+Basic test suite to validate core functionality.
+"""
+
+import pytest
+{% if "cli" in tech_stack.values() %}
+from typer.testing import CliRunner
+from {{ package_name }}.main import app
+
+runner = CliRunner()
+{% else %}
+from {{ package_name }}.core import {{ class_name }}
+{% endif %}
+
+
+{% if "cli" in tech_stack.values() %}
+def test_main_command():
+    """Test main CLI command"""
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "{{ project_name }}" in result.stdout.lower() or "{{ description[:20] }}" in result.stdout.lower()
+
+
+def test_main_command_verbose():
+    """Test main command with verbose flag"""
+    result = runner.invoke(app, ["--verbose"])
+    assert result.exit_code == 0
+
+{% else %}
+def test_initialization():
+    """Test {{ class_name }} initialization"""
+    instance = {{ class_name }}()
+    assert instance is not None
+    assert not instance._initialized
+
+
+def test_initialize():
+    """Test initialize method"""
+    instance = {{ class_name }}()
+    instance.initialize()
+    assert instance._initialized
+
+
+def test_context_manager():
+    """Test context manager usage"""
+    with {{ class_name }}() as instance:
+        assert instance._initialized
+    # After exit, should be cleaned up
+    assert not instance._initialized
+
+
+def test_config():
+    """Test configuration"""
+    config = {"test": "value"}
+    instance = {{ class_name }}(config=config)
+    assert instance.config == config
+
+{% endif %}
+
+
+def test_version():
+    """Test version is defined"""
+    from {{ package_name }} import __version__
+    assert __version__ is not None
+    assert isinstance(__version__, str)

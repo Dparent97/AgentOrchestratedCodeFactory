@@ -1,0 +1,72 @@
+"""
+{{ project_name }} - {{ description }}
+
+Main entry point for the CLI application.
+"""
+
+import typer
+from typing import Optional
+{% if "rich" in dependencies %}
+from rich.console import Console
+from rich.table import Table
+{% endif %}
+
+app = typer.Typer(help="{{ description }}")
+{% if "rich" in dependencies %}
+console = Console()
+{% endif %}
+
+
+@app.command()
+def main(
+    {% if features %}
+    # Command arguments based on features
+    {% for feature in features[:3] %}
+    {{ feature.lower().replace(' ', '_')[:20] }}: Optional[str] = typer.Option(None, help="{{ feature }}"),
+    {% endfor %}
+    {% endif %}
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
+) -> None:
+    """
+    Main command for {{ project_name }}
+
+    {% if environment %}
+    Designed for: {{ environment }}
+    {% endif %}
+    """
+    {% if "rich" in dependencies %}
+    if verbose:
+        console.print("[bold green]Starting {{ project_name }}...[/bold green]")
+
+    # TODO: Implement main functionality
+    console.print("[yellow]This is a generated template. Implement your logic here.[/yellow]")
+    {% else %}
+    if verbose:
+        print("Starting {{ project_name }}...")
+
+    # TODO: Implement main functionality
+    print("This is a generated template. Implement your logic here.")
+    {% endif %}
+
+
+{% if features and len(features) > 1 %}
+{% for feature in features[:3] %}
+@app.command()
+def {{ feature.lower().replace(' ', '_')[:30] }}() -> None:
+    """
+    {{ feature }}
+    """
+    {% if "rich" in dependencies %}
+    console.print(f"[cyan]Executing: {{ feature }}[/cyan]")
+    {% else %}
+    print("Executing: {{ feature }}")
+    {% endif %}
+    # TODO: Implement {{ feature }}
+    pass
+
+
+{% endfor %}
+{% endif %}
+
+if __name__ == "__main__":
+    app()

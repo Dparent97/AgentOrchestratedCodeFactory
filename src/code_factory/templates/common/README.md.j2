@@ -1,0 +1,50 @@
+# {{ project_name }}
+
+{{ description }}
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+{% if entry_point == "src/main.py" or "cli" in tech_stack %}
+### Command Line
+
+```bash
+{{ project_name }} --help
+```
+
+{% endif %}
+{% if features %}
+## Features
+
+{% for feature in features %}
+- {{ feature }}
+{% endfor %}
+{% endif %}
+
+{% if environment %}
+## Environment
+
+This tool is designed for: {{ environment }}
+{% endif %}
+
+## Development
+
+```bash
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov={{ package_name }} --cov-report=html
+```
+
+## License
+
+MIT

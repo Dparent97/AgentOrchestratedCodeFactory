@@ -1,0 +1,145 @@
+"""
+CLI utilities for {{ project_name }}
+
+Helper functions and utilities for the command-line interface.
+"""
+
+from typing import Optional, List, Dict, Any
+{% if "rich" in dependencies %}
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
+
+console = Console()
+
+
+def display_table(data: List[Dict[str, Any]], title: str = "") -> None:
+    """
+    Display data in a formatted table
+
+    Args:
+        data: List of dictionaries to display
+        title: Optional table title
+    """
+    if not data:
+        console.print("[yellow]No data to display[/yellow]")
+        return
+
+    table = Table(title=title, show_header=True, header_style="bold magenta")
+
+    # Add columns from first row
+    if data:
+        for key in data[0].keys():
+            table.add_column(key.replace('_', ' ').title())
+
+        # Add rows
+        for row in data:
+            table.add_row(*[str(v) for v in row.values()])
+
+    console.print(table)
+
+
+def show_progress(description: str = "Processing..."):
+    """
+    Show a progress spinner
+
+    Args:
+        description: Progress description
+
+    Returns:
+        Progress context manager
+    """
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    )
+
+
+def print_success(message: str) -> None:
+    """Print success message"""
+    console.print(f"[bold green]✓[/bold green] {message}")
+
+
+def print_error(message: str) -> None:
+    """Print error message"""
+    console.print(f"[bold red]✗[/bold red] {message}")
+
+
+def print_warning(message: str) -> None:
+    """Print warning message"""
+    console.print(f"[bold yellow]![/bold yellow] {message}")
+
+
+def print_info(message: str) -> None:
+    """Print info message"""
+    console.print(f"[bold cyan]ℹ[/bold cyan] {message}")
+
+{% else %}
+
+def display_table(data: List[Dict[str, Any]], title: str = "") -> None:
+    """
+    Display data in a simple table format
+
+    Args:
+        data: List of dictionaries to display
+        title: Optional table title
+    """
+    if not data:
+        print("No data to display")
+        return
+
+    if title:
+        print(f"\n{title}")
+        print("=" * len(title))
+
+    # Simple text table
+    if data:
+        headers = list(data[0].keys())
+        print(" | ".join(headers))
+        print("-" * (sum(len(h) for h in headers) + len(headers) * 3))
+
+        for row in data:
+            print(" | ".join(str(row[h]) for h in headers))
+
+
+def print_success(message: str) -> None:
+    """Print success message"""
+    print(f"✓ {message}")
+
+
+def print_error(message: str) -> None:
+    """Print error message"""
+    print(f"✗ {message}")
+
+
+def print_warning(message: str) -> None:
+    """Print warning message"""
+    print(f"! {message}")
+
+
+def print_info(message: str) -> None:
+    """Print info message"""
+    print(f"ℹ {message}")
+
+{% endif %}
+
+
+def confirm(message: str, default: bool = False) -> bool:
+    """
+    Ask user for confirmation
+
+    Args:
+        message: Confirmation message
+        default: Default value if user presses Enter
+
+    Returns:
+        bool: User's choice
+    """
+    default_str = "Y/n" if default else "y/N"
+    response = input(f"{message} ({default_str}): ").strip().lower()
+
+    if not response:
+        return default
+
+    return response in ('y', 'yes')

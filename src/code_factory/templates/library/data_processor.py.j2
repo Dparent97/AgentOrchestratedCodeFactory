@@ -1,0 +1,122 @@
+"""
+Data processing utilities for {{ project_name }}
+
+Handles data parsing, processing, and transformation.
+"""
+
+from typing import List, Dict, Any, Optional
+import logging
+{% if "pandas" in dependencies %}
+import pandas as pd
+{% endif %}
+
+logger = logging.getLogger(__name__)
+
+
+class DataProcessor:
+    """
+    Data processor for {{ project_name }}
+
+    Handles various data processing operations.
+    """
+
+    def __init__(self):
+        """Initialize data processor"""
+        self.data = None
+        logger.info("DataProcessor initialized")
+
+    {% if "pandas" in dependencies %}
+    def load_csv(self, file_path: str) -> pd.DataFrame:
+        """
+        Load data from CSV file
+
+        Args:
+            file_path: Path to CSV file
+
+        Returns:
+            DataFrame containing the data
+        """
+        logger.info(f"Loading CSV from: {file_path}")
+        self.data = pd.read_csv(file_path)
+        return self.data
+
+    def process_data(self) -> pd.DataFrame:
+        """
+        Process loaded data
+
+        Returns:
+            Processed DataFrame
+        """
+        if self.data is None:
+            raise ValueError("No data loaded. Call load_csv first.")
+
+        logger.info("Processing data...")
+        # TODO: Implement data processing logic
+        processed = self.data.copy()
+        return processed
+
+    def filter_data(self, column: str, value: Any) -> pd.DataFrame:
+        """
+        Filter data by column value
+
+        Args:
+            column: Column name to filter on
+            value: Value to filter for
+
+        Returns:
+            Filtered DataFrame
+        """
+        if self.data is None:
+            raise ValueError("No data loaded")
+
+        return self.data[self.data[column] == value]
+
+    {% else %}
+    def load_file(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Load data from file
+
+        Args:
+            file_path: Path to data file
+
+        Returns:
+            List of data records
+        """
+        logger.info(f"Loading file: {file_path}")
+        # TODO: Implement file loading
+        self.data = []
+        return self.data
+
+    def process_data(self) -> List[Dict[str, Any]]:
+        """
+        Process loaded data
+
+        Returns:
+            Processed data
+        """
+        if self.data is None:
+            raise ValueError("No data loaded")
+
+        logger.info("Processing data...")
+        # TODO: Implement processing logic
+        return self.data
+
+    {% endif %}
+
+    def export_results(self, output_path: str) -> None:
+        """
+        Export processed results
+
+        Args:
+            output_path: Path for output file
+        """
+        if self.data is None:
+            raise ValueError("No data to export")
+
+        logger.info(f"Exporting to: {output_path}")
+        {% if "pandas" in dependencies %}
+        self.data.to_csv(output_path, index=False)
+        {% else %}
+        # TODO: Implement export logic
+        pass
+        {% endif %}
