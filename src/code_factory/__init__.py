@@ -11,6 +11,20 @@ Focus: Building practical tools for blue-collar and technical workers
 __version__ = "0.1.0"
 __author__ = "Agent Code Factory Team"
 
-from code_factory.core.models import Idea, ProjectSpec, Task, AgentRun
+from code_factory.core.models import (
+    Idea,
+    ProjectSpec,
+    Task,
+    AgentRun,
+    PlanResult,
+    ArchitectResult,
+)
 
-__all__ = ["Idea", "ProjectSpec", "Task", "AgentRun"]
+__all__ = [
+    "Idea",
+    "ProjectSpec",
+    "Task",
+    "AgentRun",
+    "PlanResult",
+    "ArchitectResult",
+]

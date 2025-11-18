@@ -258,19 +258,58 @@ class TestResult(BaseModel):
     success: bool = Field(default=False)
 
 
-class AgentTimeoutError(Exception):
+class PlanResult(BaseModel):
     """
-    Raised when agent execution exceeds timeout
+    Result of task planning
 
-    This exception is raised when an agent takes longer than the
-    specified timeout to complete its execution. It includes information
-    about the agent and timeout duration for debugging.
+    Output of PlannerAgent containing tasks, dependency graph,
+    and complexity estimation.
     """
-    def __init__(self, agent_name: str, timeout_seconds: int, message: Optional[str] = None):
-        self.agent_name = agent_name
-        self.timeout_seconds = timeout_seconds
-        default_message = f"Agent '{agent_name}' exceeded timeout of {timeout_seconds} seconds"
-        super().__init__(message or default_message)
+    tasks: List[Task] = Field(..., description="List of tasks to execute")
+    dependency_graph: Dict[str, List[str]] = Field(
+        ...,
+        description="Task dependency mapping (task_id -> list of dependency task_ids)"
+    )
+    estimated_complexity: str = Field(
+        ...,
+        description="Project complexity estimate: 'simple', 'moderate', or 'complex'"
+    )
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="Warnings about the plan (e.g., circular dependencies, missing features)"
+    )
+
+    @field_validator("estimated_complexity")
+    @classmethod
+    def complexity_valid(cls, v: str) -> str:
+        valid_levels = ["simple", "moderate", "complex"]
+        if v not in valid_levels:
+            raise ValueError(f"Complexity must be one of {valid_levels}")
+        return v
+
+
+class ArchitectResult(BaseModel):
+    """
+    Result of architectural design
+
+    Output of ArchitectAgent containing project specification,
+    decision rationale, and blue-collar usability score.
+    """
+    spec: ProjectSpec = Field(..., description="Complete project specification")
+    rationale: Dict[str, str] = Field(
+        ...,
+        description="Architectural decisions with reasoning (e.g., {'tech_stack': 'Python for simplicity'})"
+    )
+    blue_collar_score: float = Field(
+        ...,
+        ge=0.0,
+        le=10.0,
+        description="Practicality score for field workers (0-10, higher is better)"
+    )
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="Architectural concerns or recommendations"
+    )
 
 
 class ProjectResult(BaseModel):
