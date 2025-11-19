@@ -57,3 +57,11 @@ secrets/
 generated_projects/
 !generated_projects/.gitkeep
 coverage.xml
+
+# Multi-Agent Workflow
+metrics.json
+quality_audit_report.txt
+merge_order.txt
+merge_order.json
+DASHBOARD.md
+.coverage.json

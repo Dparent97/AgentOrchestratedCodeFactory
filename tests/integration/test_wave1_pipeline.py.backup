@@ -115,11 +115,11 @@ class TestWave1Pipeline:
         # Architecture
         architect = ArchitectAgent()
         arch_input = ArchitectInput(idea=idea_workshop_tool, task_count=len(plan.tasks))
-        arch_result = architect.execute(arch_input)
+        spec = architect.execute(arch_input)
 
         # Complex project should have comprehensive structure
-        assert len(arch_result.spec.folder_structure) >= 2, "Should have multiple folders"
-        assert len(arch_result.spec.dependencies) >= 0, "May have dependencies"
+        assert len(spec.folder_structure) >= 2, "Should have multiple folders"
+        assert len(spec.dependencies) >= 0, "May have dependencies"
 
         print(f"✅ Complex pipeline complete: {spec.name}")
         print(f"   Folders: {list(spec.folder_structure.keys())}")
@@ -152,12 +152,12 @@ class TestWave1Pipeline:
         plan = planner.execute(idea_with_constraints)
 
         architect = ArchitectAgent()
-        arch_result = architect.execute(idea_with_constraints)
+        spec = architect.execute(idea_with_constraints)
 
         # Constraints should influence architecture
         # (In real implementation, architect would use constraints)
-        assert arch_result.spec.name is not None
-        assert "mechanic" in arch_result.spec.user_profile or arch_result.spec.user_profile == "mechanic"
+        assert spec.name is not None
+        assert "mechanic" in spec.user_profile or spec.user_profile == "mechanic"
 
     def test_pipeline_with_minimal_idea(self, idea_calculator):
         """Test pipeline with minimal idea (just description)"""
@@ -171,8 +171,8 @@ class TestWave1Pipeline:
         assert len(plan.tasks) > 0
 
         architect = ArchitectAgent()
-        arch_result = architect.execute(idea_calculator)
-        assert arch_result.spec.name is not None
+        spec = architect.execute(idea_calculator)
+        assert spec.name is not None
 
         print(f"✅ Minimal idea pipeline complete: {spec.name}")
 
@@ -209,21 +209,21 @@ class TestWave1Pipeline:
 
         architect = ArchitectAgent()
         arch_input = ArchitectInput(idea=idea_marine_log, task_count=len(plan.tasks))
-        arch_result = architect.execute(arch_input)
+        spec = architect.execute(arch_input)
 
         # Verify all required fields
-        assert arch_result.spec.name is not None
+        assert spec.name is not None
         assert len(spec.name) > 0
         assert spec.description is not None
         assert len(spec.description) > 0
-        assert len(arch_result.spec.tech_stack) > 0
+        assert len(spec.tech_stack) > 0
         assert "language" in spec.tech_stack
-        assert len(arch_result.spec.folder_structure) > 0
+        assert len(spec.folder_structure) > 0
         assert spec.entry_point is not None
         assert len(spec.entry_point) > 0
 
         # Verify name format (lowercase, hyphenated)
-        assert arch_result.spec.name.islower() or "-" in spec.name or "_" in spec.name
+        assert spec.name.islower() or "-" in spec.name or "_" in spec.name
         assert " " not in spec.name
 
         print(f"✅ Complete spec generated: {spec.name}")
@@ -260,11 +260,11 @@ class TestWave1ErrorHandling:
         """Test architect with very simple idea"""
         idea = Idea(description="Calculator")
         architect = ArchitectAgent()
-        arch_result = architect.execute(idea)
+        spec = architect.execute(idea)
 
         # Should generate valid spec
-        assert arch_result.spec.name is not None
-        assert len(arch_result.spec.tech_stack) > 0
+        assert spec.name is not None
+        assert len(spec.tech_stack) > 0
 
 
 @pytest.mark.integration
@@ -289,7 +289,7 @@ class TestWave1Performance:
 
         architect = ArchitectAgent()
         arch_input = ArchitectInput(idea=idea_simple_csv, task_count=len(plan.tasks))
-        arch_result = architect.execute(arch_input)
+        spec = architect.execute(arch_input)
 
         elapsed = time.time() - start
 
@@ -345,7 +345,7 @@ class TestWave1DataFlow:
 
         architect = ArchitectAgent()
         arch_input = ArchitectInput(idea=idea_marine_log, task_count=len(plan.tasks))
-        arch_result = architect.execute(arch_input)
+        spec = architect.execute(arch_input)
 
         # Verify data preservation
         # Description should influence spec
@@ -353,11 +353,11 @@ class TestWave1DataFlow:
 
         # User profile should be preserved
         if len(original_target_users) > 0:
-            assert arch_result.spec.user_profile == original_target_users[0]
+            assert spec.user_profile == original_target_users[0]
 
         # Environment should be preserved
         if original_environment:
-            assert arch_result.spec.environment == original_environment
+            assert spec.environment == original_environment
 
         print(f"✅ Data preserved through pipeline")
 
@@ -369,12 +369,11 @@ class TestWave1DataFlow:
 
         architect = ArchitectAgent()
         arch_input = ArchitectInput(idea=idea_marine_log, task_count=task_count)
-        arch_result = architect.execute(arch_input)
+        spec = architect.execute(arch_input)
 
         # Architect should receive task count
         # (May use it for complexity estimation)
         assert spec is not None
-        assert isinstance(arch_result, ArchitectResult)
-        assert isinstance(arch_result.spec, ProjectSpec)
+        assert isinstance(spec, ProjectSpec)
 
         print(f"✅ Task count ({task_count}) flowed to architect")
