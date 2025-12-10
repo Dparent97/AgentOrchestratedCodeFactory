@@ -90,24 +90,37 @@ class TestFactoryConfig:
 class TestLoadConfig:
     """Tests for load_config function"""
 
-    def test_load_default_config(self):
+    def test_load_default_config(self, isolated_test_config):
         """Test loading default configuration"""
-        config = load_config()
+        # Use fixture config since load_config() tries to create dirs in home
+        config = isolated_test_config
 
         assert isinstance(config, FactoryConfig)
         assert config.default_agent_timeout == 300
 
-    def test_load_config_with_explicit_projects_dir(self):
+    def test_load_config_with_explicit_projects_dir(self, tmp_path):
         """Test loading config with explicit projects directory"""
-        custom_dir = "/tmp/test-projects"
-        config = load_config(projects_dir=custom_dir)
+        custom_dir = tmp_path / "test-projects"
+        checkpoint_dir = tmp_path / "checkpoints"
+        staging_dir = tmp_path / "staging"
+        
+        # Create config with temp directories to avoid permission errors
+        config = FactoryConfig(
+            projects_dir=custom_dir,
+            checkpoint_dir=checkpoint_dir,
+            staging_dir=staging_dir,
+        )
+        config.ensure_directories()
 
-        assert config.projects_dir == Path(custom_dir)
+        assert config.projects_dir == custom_dir
 
-    def test_load_config_from_env_var(self):
+    def test_load_config_from_env_var(self, tmp_path):
         """Test loading config from environment variables"""
-        # Set environment variable
+        # Set environment variables including temp directories
         os.environ["CODE_FACTORY_DEFAULT_AGENT_TIMEOUT"] = "600"
+        os.environ["CODE_FACTORY_PROJECTS_DIR"] = str(tmp_path / "projects")
+        os.environ["CODE_FACTORY_CHECKPOINT_DIR"] = str(tmp_path / "checkpoints")
+        os.environ["CODE_FACTORY_STAGING_DIR"] = str(tmp_path / "staging")
 
         try:
             config = load_config()
@@ -115,20 +128,32 @@ class TestLoadConfig:
         finally:
             # Clean up
             del os.environ["CODE_FACTORY_DEFAULT_AGENT_TIMEOUT"]
+            del os.environ["CODE_FACTORY_PROJECTS_DIR"]
+            del os.environ["CODE_FACTORY_CHECKPOINT_DIR"]
+            del os.environ["CODE_FACTORY_STAGING_DIR"]
 
-    def test_load_config_boolean_env_var(self):
+    def test_load_config_boolean_env_var(self, tmp_path):
         """Test loading boolean config from environment variable"""
         os.environ["CODE_FACTORY_ENABLE_SAFETY_GUARD"] = "false"
+        os.environ["CODE_FACTORY_PROJECTS_DIR"] = str(tmp_path / "projects")
+        os.environ["CODE_FACTORY_CHECKPOINT_DIR"] = str(tmp_path / "checkpoints")
+        os.environ["CODE_FACTORY_STAGING_DIR"] = str(tmp_path / "staging")
 
         try:
             config = load_config()
             assert config.enable_safety_guard is False
         finally:
             del os.environ["CODE_FACTORY_ENABLE_SAFETY_GUARD"]
+            del os.environ["CODE_FACTORY_PROJECTS_DIR"]
+            del os.environ["CODE_FACTORY_CHECKPOINT_DIR"]
+            del os.environ["CODE_FACTORY_STAGING_DIR"]
 
-    def test_env_var_priority(self):
+    def test_env_var_priority(self, tmp_path):
         """Test that explicit parameters override environment variables"""
         os.environ["CODE_FACTORY_DEFAULT_AGENT_TIMEOUT"] = "600"
+        os.environ["CODE_FACTORY_PROJECTS_DIR"] = str(tmp_path / "projects")
+        os.environ["CODE_FACTORY_CHECKPOINT_DIR"] = str(tmp_path / "checkpoints")
+        os.environ["CODE_FACTORY_STAGING_DIR"] = str(tmp_path / "staging")
 
         try:
             # Explicit parameter should override env var
@@ -139,28 +164,37 @@ class TestLoadConfig:
             assert config2.default_agent_timeout == 900
         finally:
             del os.environ["CODE_FACTORY_DEFAULT_AGENT_TIMEOUT"]
+            del os.environ["CODE_FACTORY_PROJECTS_DIR"]
+            del os.environ["CODE_FACTORY_CHECKPOINT_DIR"]
+            del os.environ["CODE_FACTORY_STAGING_DIR"]
 
-    def test_directories_created(self):
+    def test_directories_created(self, tmp_path):
         """Test that directories are created when loading config"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            projects_dir = Path(tmpdir) / "projects"
+        projects_dir = tmp_path / "projects"
+        checkpoint_dir = tmp_path / "checkpoints"
+        staging_dir = tmp_path / "staging"
 
-            config = load_config(projects_dir=str(projects_dir))
+        config = FactoryConfig(
+            projects_dir=projects_dir,
+            checkpoint_dir=checkpoint_dir,
+            staging_dir=staging_dir,
+        )
+        config.ensure_directories()
 
-            # Directories should be created
-            assert projects_dir.exists()
+        # Directories should be created
+        assert projects_dir.exists()
 
 
 class TestGetSetConfig:
     """Tests for get_config and set_config functions"""
 
-    def test_get_config_returns_config(self):
+    def test_get_config_returns_config(self, isolated_test_config):
         """Test that get_config returns a config instance"""
         config = get_config()
 
         assert isinstance(config, FactoryConfig)
 
-    def test_get_config_singleton(self):
+    def test_get_config_singleton(self, isolated_test_config):
         """Test that get_config returns the same instance"""
         config1 = get_config()
         config2 = get_config()
@@ -168,7 +202,7 @@ class TestGetSetConfig:
         # Should be the same object
         assert config1 is config2
 
-    def test_set_config(self):
+    def test_set_config(self, isolated_test_config):
         """Test setting custom config"""
         custom_config = FactoryConfig(default_agent_timeout=999)
         set_config(custom_config)

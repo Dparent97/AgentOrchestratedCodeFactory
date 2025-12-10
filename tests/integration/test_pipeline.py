@@ -86,8 +86,9 @@ class TestPlannerToArchitectWorkflow:
         architect_result = runtime.execute_agent("architect", arch_input)
 
         assert architect_result.status == "success"
-        assert "name" in architect_result.output_data
-        assert "tech_stack" in architect_result.output_data
+        assert "spec" in architect_result.output_data
+        assert "name" in architect_result.output_data["spec"]
+        assert "tech_stack" in architect_result.output_data["spec"]
 
 
 class TestArchitectToImplementerWorkflow:
@@ -106,7 +107,7 @@ class TestArchitectToImplementerWorkflow:
         assert architect_result.status == "success"
 
         # Step 2: Code generation (needs ProjectSpec from architect)
-        spec = ProjectSpec(**architect_result.output_data)
+        spec = ProjectSpec(**architect_result.output_data["spec"])
         implementer_result = runtime.execute_agent("implementer", spec)
 
         assert implementer_result.status == "success"
@@ -128,7 +129,7 @@ class TestImplementerToTesterWorkflow:
 
         # Step 1: Architecture
         architect_result = runtime.execute_agent("architect", idea)
-        spec = ProjectSpec(**architect_result.output_data)
+        spec = ProjectSpec(**architect_result.output_data["spec"])
 
         # Step 2: Implementation
         implementer_result = runtime.execute_agent("implementer", spec)
@@ -156,7 +157,7 @@ class TestArchitectToDocWriterWorkflow:
 
         # Step 1: Architecture
         architect_result = runtime.execute_agent("architect", idea)
-        spec = ProjectSpec(**architect_result.output_data)
+        spec = ProjectSpec(**architect_result.output_data["spec"])
 
         # Step 2: Documentation
         doc_result = runtime.execute_agent("doc_writer", spec)
@@ -183,7 +184,7 @@ class TestBlueCollarAdvisorIntegration:
 
         # Step 1: Architecture
         architect_result = runtime.execute_agent("architect", idea)
-        spec = ProjectSpec(**architect_result.output_data)
+        spec = ProjectSpec(**architect_result.output_data["spec"])
 
         # Step 2: Advisory review
         advisory_input = AdvisoryInput(idea=idea, spec=spec)
@@ -230,7 +231,7 @@ class TestFullPipelineWorkflow:
         arch_input = ArchitectInput(idea=idea, task_count=task_count)
         architect_result = runtime.execute_agent("architect", arch_input)
         assert architect_result.status == "success"
-        spec = ProjectSpec(**architect_result.output_data)
+        spec = ProjectSpec(**architect_result.output_data["spec"])
 
         # Stage 4: Advisory
         advisory_input = AdvisoryInput(idea=idea, spec=spec)
@@ -372,7 +373,7 @@ class TestDataFlowValidation:
         architect_result = runtime.execute_agent("architect", idea)
 
         # Should be able to create ProjectSpec from output
-        spec = ProjectSpec(**architect_result.output_data)
+        spec = ProjectSpec(**architect_result.output_data["spec"])
 
         # Should be valid input for implementer
         implementer_result = runtime.execute_agent("implementer", spec)

@@ -73,7 +73,7 @@ def test_planner_agent():
     
     assert hasattr(result, "tasks")
     assert len(result.tasks) > 0
-    assert result.tasks[0].id == "t1"
+    assert result.tasks[0].id == "task_1"
 
 
 def test_cli_exists():

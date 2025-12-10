@@ -5,6 +5,8 @@ Provides reusable test fixtures for all test modules.
 These fixtures create standard test data and agent instances.
 """
 
+import os
+import tempfile
 import pytest
 
 from code_factory.agents.architect import ArchitectAgent
@@ -319,3 +321,38 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: Slow tests (>1s)")
     config.addinivalue_line("markers", "wave1: Wave 1 agent tests")
     config.addinivalue_line("markers", "wave2: Wave 2 agent tests")
+
+
+# ============================================================================
+# Test Environment Setup - Use temp directories to avoid permission issues
+# ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def isolated_test_config(tmp_path):
+    """
+    Auto-use fixture that isolates tests from the user's home directory.
+    
+    Creates temporary directories for projects, checkpoints, and staging
+    to prevent PermissionError when tests try to create directories
+    outside the workspace.
+    """
+    from code_factory.core.config import FactoryConfig, set_config, _config
+    import code_factory.core.config as config_module
+    
+    # Save original config
+    original_config = config_module._config
+    
+    # Create isolated config with temp directories
+    test_config = FactoryConfig(
+        projects_dir=tmp_path / "projects",
+        checkpoint_dir=tmp_path / "checkpoints",
+        staging_dir=tmp_path / "staging",
+    )
+    test_config.ensure_directories()
+    set_config(test_config)
+    
+    yield test_config
+    
+    # Restore original config
+    config_module._config = original_config

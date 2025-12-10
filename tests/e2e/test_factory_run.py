@@ -23,6 +23,7 @@ from code_factory.agents.planner import PlannerAgent
 from code_factory.agents.safety_guard import SafetyGuard
 from code_factory.agents.tester import TesterAgent
 from code_factory.core.agent_runtime import AgentRuntime
+from code_factory.core.config import FactoryConfig
 from code_factory.core.models import Idea
 from code_factory.core.orchestrator import Orchestrator
 
@@ -41,15 +42,26 @@ def setup_full_runtime():
     return runtime
 
 
+def create_orchestrator_with_tmpdir(runtime, tmpdir):
+    """Create an Orchestrator with temporary directory config"""
+    config = FactoryConfig(
+        projects_dir=Path(tmpdir) / "projects",
+        checkpoint_dir=Path(tmpdir) / "checkpoints",
+        staging_dir=Path(tmpdir) / "staging",
+    )
+    config.ensure_directories()
+    return Orchestrator(runtime, config=config)
+
+
 class TestCompleteFactoryRun:
     """Test complete factory runs from idea to project"""
 
-    def test_simple_idea_to_project(self):
+    def test_simple_idea_to_project(self, isolated_test_config):
         """Test transforming simple idea into project"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(description="Build a simple calculator tool")
             result = orchestrator.run_factory(idea)
@@ -59,12 +71,12 @@ class TestCompleteFactoryRun:
             assert hasattr(result, "project_name")
             assert result.duration_seconds is not None
 
-    def test_complex_idea_with_features(self):
+    def test_complex_idea_with_features(self, isolated_test_config):
         """Test complex idea with features and constraints"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(
                 description="Build a maintenance tracking tool for marine engineers",
@@ -87,12 +99,12 @@ class TestCompleteFactoryRun:
             assert result is not None
             assert result.project_name != ""
 
-    def test_multiple_sequential_runs(self):
+    def test_multiple_sequential_runs(self, isolated_test_config):
         """Test running factory multiple times sequentially"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             ideas = [
                 Idea(description="Build a todo list app"),
@@ -113,12 +125,12 @@ class TestCompleteFactoryRun:
 class TestRealWorldScenarios:
     """Test real-world usage scenarios"""
 
-    def test_field_worker_tool_idea(self):
+    def test_field_worker_tool_idea(self, isolated_test_config):
         """Test building tool for field worker"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(
                 description="Quick inspection checklist for ship machinery",
@@ -134,12 +146,12 @@ class TestRealWorldScenarios:
 
             assert result is not None
 
-    def test_simple_utility_tool_idea(self):
+    def test_simple_utility_tool_idea(self, isolated_test_config):
         """Test building simple utility tool"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(
                 description="Convert between different units of measurement"
@@ -148,12 +160,12 @@ class TestRealWorldScenarios:
 
             assert result is not None
 
-    def test_data_processing_tool_idea(self):
+    def test_data_processing_tool_idea(self, isolated_test_config):
         """Test building data processing tool"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(
                 description="Parse maintenance logs and generate summary reports",
@@ -171,12 +183,12 @@ class TestRealWorldScenarios:
 class TestDangerousIdeaRejection:
     """Test that dangerous ideas are properly rejected"""
 
-    def test_dangerous_idea_rejected_early(self):
+    def test_dangerous_idea_rejected_early(self, isolated_test_config):
         """Test that dangerous ideas are rejected at safety stage"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             dangerous_idea = Idea(
                 description="Tool to hack into ship control systems"
@@ -234,12 +246,12 @@ class TestConfirmationRequired:
 class TestExecutionHistory:
     """Test execution history tracking during factory runs"""
 
-    def test_execution_history_recorded(self):
+    def test_execution_history_recorded(self, isolated_test_config):
         """Test that execution history is recorded"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(description="Build a calculator")
 
@@ -304,12 +316,12 @@ class TestExecutionHistory:
 class TestProjectValidation:
     """Test validation of generated projects"""
 
-    def test_project_result_structure(self):
+    def test_project_result_structure(self, isolated_test_config):
         """Test that project result has expected structure"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(description="Build a simple tool")
             result = orchestrator.run_factory(idea)
@@ -323,12 +335,12 @@ class TestProjectValidation:
             assert hasattr(result, "created_at")
             assert hasattr(result, "duration_seconds")
 
-    def test_project_name_is_valid(self):
+    def test_project_name_is_valid(self, isolated_test_config):
         """Test that generated project name is valid"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(description="Build a Test Tool")
             result = orchestrator.run_factory(idea)
@@ -342,12 +354,12 @@ class TestProjectValidation:
 class TestErrorRecovery:
     """Test error recovery scenarios"""
 
-    def test_orchestrator_handles_errors_gracefully(self):
+    def test_orchestrator_handles_errors_gracefully(self, isolated_test_config):
         """Test that orchestrator handles errors gracefully"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             # This should not crash
             idea = Idea(description="Build a tool")
@@ -360,12 +372,12 @@ class TestErrorRecovery:
 class TestOrchestratorStatus:
     """Test orchestrator status during execution"""
 
-    def test_status_before_run(self):
+    def test_status_before_run(self, isolated_test_config):
         """Test orchestrator status before any runs"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             status = orchestrator.get_current_status()
 
@@ -374,12 +386,12 @@ class TestOrchestratorStatus:
             assert "execution_history" in status
             assert len(status["registered_agents"]) == 8  # All 8 agents
 
-    def test_status_after_run(self):
+    def test_status_after_run(self, isolated_test_config):
         """Test orchestrator status after run"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             # Execute some agents
             idea = Idea(description="Build a tool")
@@ -393,24 +405,24 @@ class TestOrchestratorStatus:
 class TestEdgeCases:
     """Test edge cases and boundary conditions"""
 
-    def test_minimal_idea(self):
+    def test_minimal_idea(self, isolated_test_config):
         """Test with minimal idea (just description)"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(description="Simple tool")
             result = orchestrator.run_factory(idea)
 
             assert result is not None
 
-    def test_idea_with_empty_lists(self):
+    def test_idea_with_empty_lists(self, isolated_test_config):
         """Test idea with empty lists"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(
                 description="Tool",
@@ -422,12 +434,12 @@ class TestEdgeCases:
 
             assert result is not None
 
-    def test_very_long_description(self):
+    def test_very_long_description(self, isolated_test_config):
         """Test with very long description"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             long_description = "Build a " + "comprehensive " * 100 + "tool"
             idea = Idea(description=long_description)
@@ -435,12 +447,12 @@ class TestEdgeCases:
 
             assert result is not None
 
-    def test_special_characters_in_description(self):
+    def test_special_characters_in_description(self, isolated_test_config):
         """Test with special characters in description"""
         runtime = setup_full_runtime()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            orchestrator = create_orchestrator_with_tmpdir(runtime, tmpdir)
 
             idea = Idea(description="Build a tool with @#$% special chars!")
             result = orchestrator.run_factory(idea)
@@ -484,7 +496,7 @@ class TestAgentInteraction:
         arch_input = ArchitectInput(idea=idea, task_count=task_count)
         architect_result = runtime.execute_agent("architect", arch_input)
 
-        spec = ProjectSpec(**architect_result.output_data)
+        spec = ProjectSpec(**architect_result.output_data["spec"])
 
         # Each output should be consumable
         assert task_count > 0

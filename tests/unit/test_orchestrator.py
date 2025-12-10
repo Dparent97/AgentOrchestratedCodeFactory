@@ -34,11 +34,18 @@ class TestOrchestratorInitialization:
         assert orchestrator is not None
         assert orchestrator.runtime is runtime
 
-    def test_orchestrator_with_custom_projects_dir(self):
+    def test_orchestrator_with_custom_projects_dir(self, isolated_test_config):
         """Test Orchestrator with custom projects directory"""
+        from code_factory.core.config import FactoryConfig
+        
         runtime = AgentRuntime()
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            config = FactoryConfig(
+                projects_dir=tmpdir,
+                checkpoint_dir=Path(tmpdir) / "checkpoints",
+                staging_dir=Path(tmpdir) / "staging",
+            )
+            orchestrator = Orchestrator(runtime, config=config)
 
             assert orchestrator.projects_dir == Path(tmpdir)
 
@@ -195,14 +202,21 @@ class TestCheckpointFunctionality:
         assert hasattr(orchestrator, "checkpoint")
         assert callable(orchestrator.checkpoint)
 
-    def test_checkpoint_accepts_parameters(self):
-        """Test checkpoint accepts stage and message"""
+    def test_checkpoint_accepts_parameters(self, isolated_test_config):
+        """Test checkpoint accepts stage and idea"""
         runtime = AgentRuntime()
         orchestrator = Orchestrator(runtime)
 
+        # Create a test idea
+        idea = Idea(description="Test idea for checkpoint")
+
         # Should not raise exception
         try:
-            orchestrator.checkpoint("planning", "Completed planning stage")
+            orchestrator.checkpoint(
+                stage="planning",
+                idea=idea,
+                metadata={"project_name": "test-project"}
+            )
         except Exception as e:
             pytest.fail(f"checkpoint raised unexpected exception: {e}")
 
@@ -218,16 +232,24 @@ class TestErrorHandling:
         assert hasattr(orchestrator, "handle_failure")
         assert callable(orchestrator.handle_failure)
 
-    def test_handle_failure_accepts_parameters(self):
-        """Test handle_failure accepts agent name and error"""
+    def test_handle_failure_accepts_parameters(self, isolated_test_config):
+        """Test handle_failure accepts agent name, error, stage, and idea"""
         runtime = AgentRuntime()
         orchestrator = Orchestrator(runtime)
 
         error = Exception("Test error")
+        idea = Idea(description="Test idea for error handling")
 
         # Should not raise exception
         try:
-            orchestrator.handle_failure("test_agent", error)
+            result = orchestrator.handle_failure(
+                agent_name="test_agent",
+                error=error,
+                stage="planning",
+                idea=idea,
+            )
+            assert isinstance(result, dict)
+            assert "failed_agent" in result
         except Exception as e:
             pytest.fail(f"handle_failure raised unexpected exception: {e}")
 
@@ -312,19 +334,33 @@ class TestProjectsDirectory:
 
         assert isinstance(orchestrator.projects_dir, Path)
 
-    def test_custom_projects_dir_is_used(self):
+    def test_custom_projects_dir_is_used(self, isolated_test_config):
         """Test that custom projects directory is used"""
-        runtime = AgentRuntime()
-        custom_dir = "/tmp/custom_projects"
-        orchestrator = Orchestrator(runtime, projects_dir=custom_dir)
-
-        assert str(orchestrator.projects_dir) == custom_dir
-
-    def test_projects_dir_in_status(self):
-        """Test that projects_dir appears in status"""
+        from code_factory.core.config import FactoryConfig
+        
         runtime = AgentRuntime()
         with tempfile.TemporaryDirectory() as tmpdir:
-            orchestrator = Orchestrator(runtime, projects_dir=tmpdir)
+            config = FactoryConfig(
+                projects_dir=tmpdir,
+                checkpoint_dir=Path(tmpdir) / "checkpoints",
+                staging_dir=Path(tmpdir) / "staging",
+            )
+            orchestrator = Orchestrator(runtime, config=config)
+
+            assert str(orchestrator.projects_dir) == tmpdir
+
+    def test_projects_dir_in_status(self, isolated_test_config):
+        """Test that projects_dir appears in status"""
+        from code_factory.core.config import FactoryConfig
+        
+        runtime = AgentRuntime()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FactoryConfig(
+                projects_dir=tmpdir,
+                checkpoint_dir=Path(tmpdir) / "checkpoints",
+                staging_dir=Path(tmpdir) / "staging",
+            )
+            orchestrator = Orchestrator(runtime, config=config)
             status = orchestrator.get_current_status()
 
             assert status["projects_dir"] == tmpdir

@@ -121,8 +121,8 @@ class TestWave1Pipeline:
         assert len(arch_result.spec.folder_structure) >= 2, "Should have multiple folders"
         assert len(arch_result.spec.dependencies) >= 0, "May have dependencies"
 
-        print(f"✅ Complex pipeline complete: {spec.name}")
-        print(f"   Folders: {list(spec.folder_structure.keys())}")
+        print(f"✅ Complex pipeline complete: {arch_result.spec.name}")
+        print(f"   Folders: {list(arch_result.spec.folder_structure.keys())}")
 
     def test_safety_guard_blocks_dangerous_ideas(self):
         """Test that safety guard blocks dangerous operations"""
@@ -174,7 +174,7 @@ class TestWave1Pipeline:
         arch_result = architect.execute(idea_calculator)
         assert arch_result.spec.name is not None
 
-        print(f"✅ Minimal idea pipeline complete: {spec.name}")
+        print(f"✅ Minimal idea pipeline complete: {arch_result.spec.name}")
 
     def test_planner_creates_valid_dependency_graph(self, idea_marine_log):
         """Test that planner creates a valid task dependency graph"""
@@ -212,18 +212,19 @@ class TestWave1Pipeline:
         arch_result = architect.execute(arch_input)
 
         # Verify all required fields
-        assert arch_result.spec.name is not None
+        spec = arch_result.spec
+        assert spec.name is not None
         assert len(spec.name) > 0
         assert spec.description is not None
         assert len(spec.description) > 0
-        assert len(arch_result.spec.tech_stack) > 0
+        assert len(spec.tech_stack) > 0
         assert "language" in spec.tech_stack
-        assert len(arch_result.spec.folder_structure) > 0
+        assert len(spec.folder_structure) > 0
         assert spec.entry_point is not None
         assert len(spec.entry_point) > 0
 
         # Verify name format (lowercase, hyphenated)
-        assert arch_result.spec.name.islower() or "-" in spec.name or "_" in spec.name
+        assert spec.name.islower() or "-" in spec.name or "_" in spec.name
         assert " " not in spec.name
 
         print(f"✅ Complete spec generated: {spec.name}")
@@ -348,12 +349,13 @@ class TestWave1DataFlow:
         arch_result = architect.execute(arch_input)
 
         # Verify data preservation
+        spec = arch_result.spec
         # Description should influence spec
         assert spec.description is not None
 
         # User profile should be preserved
         if len(original_target_users) > 0:
-            assert arch_result.spec.user_profile == original_target_users[0]
+            assert spec.user_profile == original_target_users[0]
 
         # Environment should be preserved
         if original_environment:
@@ -373,7 +375,7 @@ class TestWave1DataFlow:
 
         # Architect should receive task count
         # (May use it for complexity estimation)
-        assert spec is not None
+        assert arch_result.spec is not None
         assert isinstance(arch_result, ArchitectResult)
         assert isinstance(arch_result.spec, ProjectSpec)
 
