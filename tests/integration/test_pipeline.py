@@ -140,8 +140,13 @@ class TestImplementerToTesterWorkflow:
         tester_result = runtime.execute_agent("tester", test_input)
 
         assert tester_result.status == "success"
-        assert "total_tests" in tester_result.output_data
-        assert "coverage_percent" in tester_result.output_data
+        # TesterAgent returns TestGenerationOutput with test_files and test_result
+        assert "test_result" in tester_result.output_data
+        assert "test_files" in tester_result.output_data
+        # Verify test_result structure
+        test_result = tester_result.output_data["test_result"]
+        assert "total_tests" in test_result
+        assert "coverage_percent" in test_result
 
 
 class TestArchitectToDocWriterWorkflow:
