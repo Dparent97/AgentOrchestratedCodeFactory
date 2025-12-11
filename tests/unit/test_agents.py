@@ -248,6 +248,144 @@ class TestPlannerAgent:
             assert len(task.agent) > 0
 
 
+class TestPlannerAgentEdgeCases:
+    """Additional edge case tests for PlannerAgent"""
+
+    def test_infer_filename_all_stop_words(self):
+        """Test filename inference when feature is all stop words"""
+        planner = PlannerAgent()
+        # Feature with only stop words
+        filename = planner._infer_filename("a the and for to")
+        assert filename == "src/module.py"
+
+    def test_infer_filename_numeric_feature(self):
+        """Test filename inference with numeric content"""
+        planner = PlannerAgent()
+        filename = planner._infer_filename("Parse data from 2024")
+        assert filename.startswith("src/")
+        assert filename.endswith(".py")
+
+    def test_infer_filename_special_characters(self):
+        """Test filename inference strips special characters"""
+        planner = PlannerAgent()
+        filename = planner._infer_filename("Send @email! to users")
+        assert "@" not in filename
+        assert "!" not in filename
+
+    def test_build_dependency_graph_empty_tasks(self):
+        """Test dependency graph with no tasks"""
+        planner = PlannerAgent()
+        graph = planner._build_dependency_graph([])
+        assert graph == {}
+
+    def test_build_dependency_graph_preserves_all_tasks(self):
+        """Test dependency graph includes all tasks"""
+        planner = PlannerAgent()
+        idea = Idea(description="Tool", features=["f1", "f2", "f3"])
+        result = planner.execute(idea)
+
+        graph = result.dependency_graph
+        task_ids = {t.id for t in result.tasks}
+
+        # All tasks should be in graph
+        assert set(graph.keys()) == task_ids
+
+    def test_has_circular_dependencies_empty_graph(self):
+        """Test circular dependency check with empty graph"""
+        planner = PlannerAgent()
+        assert planner._has_circular_dependencies({}) is False
+
+    def test_has_circular_dependencies_single_node(self):
+        """Test circular dependency check with single node"""
+        planner = PlannerAgent()
+        graph = {"task_1": []}
+        assert planner._has_circular_dependencies(graph) is False
+
+    def test_has_circular_dependencies_self_reference(self):
+        """Test detection of self-referencing task"""
+        planner = PlannerAgent()
+        graph = {"task_1": ["task_1"]}  # Self-reference
+        assert planner._has_circular_dependencies(graph) is True
+
+    def test_has_circular_dependencies_two_node_cycle(self):
+        """Test detection of two-node cycle"""
+        planner = PlannerAgent()
+        graph = {
+            "task_1": ["task_2"],
+            "task_2": ["task_1"]  # Creates cycle
+        }
+        assert planner._has_circular_dependencies(graph) is True
+
+    def test_has_circular_dependencies_three_node_cycle(self):
+        """Test detection of three-node cycle"""
+        planner = PlannerAgent()
+        graph = {
+            "task_1": ["task_2"],
+            "task_2": ["task_3"],
+            "task_3": ["task_1"]  # Creates cycle
+        }
+        assert planner._has_circular_dependencies(graph) is True
+
+    def test_estimate_complexity_boundary_simple(self):
+        """Test complexity at simple/moderate boundary"""
+        planner = PlannerAgent()
+        # 2 features, no constraints -> should be simple
+        idea = Idea(description="Tool", features=["f1", "f2"])
+        result = planner.execute(idea)
+        assert result.estimated_complexity in ["simple", "moderate"]
+
+    def test_estimate_complexity_with_constraints(self):
+        """Test that many constraints increase complexity"""
+        planner = PlannerAgent()
+        idea = Idea(
+            description="Tool",
+            features=["f1", "f2"],
+            constraints=["c1", "c2", "c3", "c4"]  # 4 constraints
+        )
+        result = planner.execute(idea)
+        # Constraints should push toward higher complexity
+        assert result.estimated_complexity in ["moderate", "complex"]
+
+    def test_planner_task_ids_are_unique(self):
+        """Test that all generated task IDs are unique"""
+        planner = PlannerAgent()
+        idea = Idea(
+            description="Complex tool",
+            features=["f1", "f2", "f3", "f4", "f5"]
+        )
+        result = planner.execute(idea)
+
+        task_ids = [t.id for t in result.tasks]
+        assert len(task_ids) == len(set(task_ids))
+
+    def test_planner_config_task_is_first(self):
+        """Test that config task has no dependencies (first in chain)"""
+        planner = PlannerAgent()
+        idea = Idea(description="Tool", features=["feature1"])
+        result = planner.execute(idea)
+
+        config_tasks = [t for t in result.tasks if t.type == TaskType.CONFIG]
+        assert len(config_tasks) >= 1
+        # Config task should have no dependencies
+        assert config_tasks[0].dependencies == []
+
+    def test_planner_test_tasks_depend_on_code_tasks(self):
+        """Test that test tasks depend on code tasks"""
+        planner = PlannerAgent()
+        idea = Idea(description="Tool", features=["feature1"])
+        result = planner.execute(idea)
+
+        code_task_ids = {t.id for t in result.tasks if t.type == TaskType.CODE}
+        test_tasks = [t for t in result.tasks if t.type == TaskType.TEST]
+
+        # Each test task should depend on at least one code task
+        for test_task in test_tasks:
+            has_code_dependency = any(
+                dep in code_task_ids for dep in test_task.dependencies
+            )
+            assert has_code_dependency, f"Test task {test_task.id} has no code dependency"
+
+
 class TestArchitectAgent:
     """Test ArchitectAgent functionality"""
 
@@ -501,6 +639,136 @@ class TestArchitectAgent:
 
         # Should warn about no features
         assert any("features" in w.lower() for w in result.warnings)
+
+
+class TestArchitectAgentOutputStructure:
+    """Test ArchitectAgent output structure completeness"""
+
+    def test_architect_result_has_all_required_fields(self):
+        """Test ArchitectResult contains all required fields"""
+        architect = ArchitectAgent()
+        idea = Idea(description="Build a tool")
+        result = architect.execute(idea)
+
+        assert hasattr(result, "spec")
+        assert hasattr(result, "rationale")
+        assert hasattr(result, "blue_collar_score")
+        assert hasattr(result, "warnings")
+
+    def test_project_spec_has_all_required_fields(self):
+        """Test ProjectSpec contains all required fields"""
+        architect = ArchitectAgent()
+        idea = Idea(description="Build a tool")
+        result = architect.execute(idea)
+
+        spec = result.spec
+        assert spec.name is not None and len(spec.name) > 0
+        assert spec.description is not None
+        assert isinstance(spec.tech_stack, dict)
+        assert isinstance(spec.folder_structure, dict)
+        assert spec.entry_point is not None
+
+    def test_tech_stack_always_has_language(self):
+        """Test tech_stack always includes language"""
+        architect = ArchitectAgent()
+        ideas = [
+            Idea(description="Simple calculator"),
+            Idea(description="CSV parser", features=["parse data"]),
+            Idea(description="API server", features=["HTTP endpoints"]),
+        ]
+        
+        for idea in ideas:
+            result = architect.execute(idea)
+            assert "language" in result.spec.tech_stack
+            assert result.spec.tech_stack["language"] == "python"
+
+    def test_folder_structure_always_has_src_and_tests(self):
+        """Test folder structure always includes src/ and tests/"""
+        architect = ArchitectAgent()
+        idea = Idea(description="Any tool")
+        result = architect.execute(idea)
+
+        assert "src/" in result.spec.folder_structure
+        assert "tests/" in result.spec.folder_structure
+
+    def test_dependencies_is_list(self):
+        """Test dependencies is always a list"""
+        architect = ArchitectAgent()
+        idea = Idea(description="Build a tool")
+        result = architect.execute(idea)
+
+        assert isinstance(result.spec.dependencies, list)
+
+    def test_blue_collar_score_in_valid_range(self):
+        """Test blue_collar_score is always 0-10"""
+        architect = ArchitectAgent()
+        ideas = [
+            Idea(description="Simple offline tool"),
+            Idea(description="Complex cloud API with many features",
+                 features=["cloud", "api", "sync", "realtime"]),
+        ]
+        
+        for idea in ideas:
+            result = architect.execute(idea)
+            assert 0.0 <= result.blue_collar_score <= 10.0
+
+    def test_rationale_keys_are_strings(self):
+        """Test rationale dict has string keys and values"""
+        architect = ArchitectAgent()
+        idea = Idea(description="Build a tool")
+        result = architect.execute(idea)
+
+        for key, value in result.rationale.items():
+            assert isinstance(key, str)
+            assert isinstance(value, str)
+
+    def test_warnings_is_list_of_strings(self):
+        """Test warnings is always a list of strings"""
+        architect = ArchitectAgent()
+        idea = Idea(description="Build a tool")
+        result = architect.execute(idea)
+
+        assert isinstance(result.warnings, list)
+        for warning in result.warnings:
+            assert isinstance(warning, str)
+
+    def test_analyze_domain_returns_valid_domain(self):
+        """Test _analyze_domain returns one of expected domains"""
+        architect = ArchitectAgent()
+        valid_domains = {
+            "data_processing", "logging_tracking", "calculator",
+            "converter", "web_service", "general_utility"
+        }
+        
+        ideas = [
+            Idea(description="Parse CSV files"),
+            Idea(description="Track maintenance logs"),
+            Idea(description="Calculate formulas"),
+            Idea(description="Convert units"),
+            Idea(description="Build API server"),
+            Idea(description="General utility tool"),
+        ]
+        
+        for idea in ideas:
+            domain = architect._analyze_domain(idea)
+            assert domain in valid_domains
+
+    def test_project_name_is_valid_format(self):
+        """Test generated project name is valid (lowercase, hyphenated)"""
+        architect = ArchitectAgent()
+        ideas = [
+            Idea(description="Build a Cool Tool!"),
+            Idea(description="My AWESOME Project"),
+            Idea(description="Test_Tool-Name"),
+        ]
+        
+        for idea in ideas:
+            result = architect.execute(idea)
+            name = result.spec.name
+            # Should be lowercase
+            assert name == name.lower()
+            # Should not contain invalid characters
+            assert all(c.isalnum() or c in "-_" for c in name)
 
 
 class TestImplementerAgent:

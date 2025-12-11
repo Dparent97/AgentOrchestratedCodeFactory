@@ -1,3 +1,88 @@
+# Agent Roles and Responsibilities
+
+This document describes each agent in the Code Factory pipeline, their inputs, outputs, and responsibilities.
+
+## Overview
+
+The Code Factory uses a multi-agent architecture where each agent has a specific role:
+
+| Agent | Purpose | Input | Output |
+|-------|---------|-------|--------|
+| SafetyGuard | Validate ideas for safety | `Idea` | `SafetyCheck` |
+| PlannerAgent | Create task breakdown | `Idea` | `PlanResult` |
+| ArchitectAgent | Design architecture | `Idea` + `Tasks` | `ArchitectResult` |
+| ImplementerAgent | Generate code | `ProjectSpec` | `CodeOutput` |
+| TesterAgent | Create tests | `ProjectSpec` + code | `TestResult` |
+| DocWriterAgent | Write documentation | `ProjectSpec` | `DocOutput` |
+| GitOpsAgent | Git operations | `GitOperation` | `GitResult` |
+| BlueCollarAdvisor | Review for field use | `Idea` + `ProjectSpec` | `AdvisoryReport` |
+
+---
+
+## Agent Details
+
+### 📋 PlannerAgent
+
+**File**: `src/code_factory/agents/planner.py`
+
+**Purpose**: Transform a high-level idea into actionable tasks with dependencies
+
+**Input**: `Idea`
+
+**Output**: `PlanResult` containing:
+- `tasks`: List of `Task` objects with IDs, types, descriptions, dependencies
+- `dependency_graph`: Dict mapping task IDs to their dependencies
+- `estimated_complexity`: "simple", "moderate", or "complex"
+- `warnings`: List of planning warnings
+
+**Algorithm**:
+1. Analyze idea description and features
+2. Create CONFIG task (setup, dependencies)
+3. Create CODE tasks (one per feature, or one default)
+4. Create TEST tasks (one per code task)
+5. Create DOC tasks (README, examples for 3+ features)
+6. Build dependency graph
+7. Detect circular dependencies
+8. Estimate complexity based on task/feature counts
+
+**Task Types**:
+- `CONFIG`: Project setup and configuration
+- `CODE`: Implementation code
+- `TEST`: Unit and integration tests
+- `DOC`: Documentation files
+
+---
+
+### 🏗️ ArchitectAgent
+
+**File**: `src/code_factory/agents/architect.py`
+
+**Purpose**: Design project architecture and technology choices
+
+**Input**: `Idea` or `ArchitectInput(idea, tasks)`
+
+**Output**: `ArchitectResult` containing:
+- `spec`: Complete `ProjectSpec`
+- `rationale`: Dict explaining decisions
+- `blue_collar_score`: 0-10 field usability rating
+- `warnings`: Architectural warnings
+
+**Algorithm**:
+1. Analyze idea domain (data_processing, calculator, web_service, etc.)
+2. Select tech stack based on domain
+3. Design folder structure (simple vs complex)
+4. Identify dependencies
+5. Generate valid project name
+6. Calculate blue-collar score
+7. Generate warnings for potential issues
+
+**Domain Detection**:
+- `data_processing`: CSV, Excel, data, parse, analyze
+- `logging_tracking`: log, monitor, track, record
+- `calculator`: calculate, math, formula, compute
+- `converter`: convert, transform, translate
+- `web_service`: web, api, http, server
+- `general_utility`: fallback for unrecognized domains
 
 **Blue-Collar Considerations**:
 - CLI tools are better than web apps for offline work
@@ -241,26 +326,42 @@ git_ops.create_branch(path, branch_name)
 - ✅ Read-only system monitoring
 - ✅ Report generation
 
-**Safety Check Logic**:
-```python
-dangerous_keywords = [
-    "control", "actuate", "override", "bypass",
-    "hack", "exploit", "crack", "inject"
-]
+**Multi-Layer Validation**:
+SafetyGuard uses a sophisticated multi-layer validation approach:
 
-if any(keyword in idea.description.lower() for keyword in dangerous_keywords):
-    return SafetyCheck(
-        approved=False,
-        warnings=["Idea contains dangerous operation keyword"],
-        required_confirmations=[]
+1. **Input Normalization**: Converts text to lowercase, removes accents, normalizes leetspeak (h4ck → hack)
+2. **Bypass Detection**: Identifies obfuscation attempts (excessive special chars, unicode tricks, case mixing)
+3. **Pattern Matching**: Regex-based detection of dangerous operation patterns
+4. **Confirmation Patterns**: Identifies operations requiring human confirmation
+5. **Semantic Analysis**: Analyzes environment and user roles for additional warnings
+
+**Confidence Scoring**:
+Each safety check includes a confidence score (0.0-1.0) that decreases when:
+- Bypass attempts are detected (-0.2 per attempt)
+- Semantic warnings are triggered (-0.1 per warning)
+
+**Example SafetyCheck Output**:
+```python
+SafetyCheck(
+    approved=False,
+    warnings=["Idea violates safety guidelines - see docs/safety.md",
+              "Dangerous operation detected: 'hack'"],
+    required_confirmations=[],
+    blocked_keywords=["hack"],
+    metadata=SafetyCheckMetadata(
+        normalized_input="hack into the system",
+        patterns_matched=["hack(?:ing)?"],
+        bypass_attempts_detected=["case_mixing"],
+        confidence_score=0.8
     )
+)
 ```
 
 ---
 
 ## Agent Communication Protocol
 
-All agents follow a standard interface:
+All agents follow a standard interface defined in `src/code_factory/core/agent_runtime.py`:
 
 ```python
 from abc import ABC, abstractmethod
@@ -296,7 +397,48 @@ class BaseAgent(ABC):
             AgentExecutionError: If execution fails
         """
         pass
+    
+    def validate_input(self, input_data: Any, expected_type: Type[BaseModel]) -> BaseModel:
+        """
+        Helper method to validate input against expected schema.
+        Accepts either the expected type or a dict that can be converted.
+        
+        Args:
+            input_data: Data to validate
+            expected_type: Expected Pydantic model type
+            
+        Returns:
+            Validated input as expected_type
+            
+        Raises:
+            ValueError: If validation fails
+        """
+        pass
 ```
+
+### The `execute()` Method Pattern
+
+The `execute()` method is the core of each agent. Key principles:
+
+1. **Single Input, Single Output**: Each call takes one input model, returns one output model
+2. **Stateless**: Agents don't maintain state between calls
+3. **Pydantic Models**: All inputs/outputs are Pydantic BaseModel subclasses for validation
+4. **Idempotent**: Same input should produce same output (given same external state)
+
+**Input Validation Pattern**:
+```python
+def execute(self, input_data: BaseModel) -> BaseModel:
+    # Validate and convert input using helper method
+    idea = self.validate_input(input_data, Idea)
+    
+    # Agent logic here...
+    
+    return OutputModel(...)
+```
+
+This allows agents to accept either:
+- Direct Pydantic model instances: `agent.execute(Idea(description="..."))`
+- Dictionaries: `agent.execute({"description": "..."})`
 
 ## Error Handling
 

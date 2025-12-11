@@ -151,7 +151,7 @@ class TestDangerousKeywords:
         
         Note: Current implementation normalizes text which removes special chars,
         so "rm -rf /" becomes "rm rf" and doesn't match the pattern.
-        This is a known limitation - the pattern r"rm\s*-rf\s*/" needs
+        This is a known limitation - the pattern rm\\s*-rf\\s*/ needs
         special handling in the implementation.
         """
         idea = Idea(description="Script that runs rm -rf / on remote servers")
@@ -492,3 +492,264 @@ class TestMultipleViolations:
         assert result.approved is False
         # Should have at least one warning per blocked keyword plus general warning
         assert len(result.warnings) >= len(result.blocked_keywords)
+
+
+class TestTextNormalization:
+    """Test SafetyGuard.normalize_text() method"""
+
+    def test_lowercase_conversion(self):
+        """Test that text is converted to lowercase"""
+        result = SafetyGuard.normalize_text("BUILD A TOOL")
+        assert result == "build a tool"
+
+    def test_unicode_normalization(self):
+        """Test unicode characters are normalized"""
+        # Accented characters should be stripped
+        result = SafetyGuard.normalize_text("café résumé")
+        assert "cafe" in result
+        assert "resume" in result
+
+    def test_leetspeak_normalization(self):
+        """Test leetspeak numbers are converted to letters"""
+        result = SafetyGuard.normalize_text("h4ck 1nt0 syst3m")
+        # 4->a, 1->i, 0->o, 3->e
+        assert "hack" in result
+        assert "into" in result
+        assert "system" in result
+
+    def test_special_character_removal(self):
+        """Test special characters are replaced with spaces"""
+        result = SafetyGuard.normalize_text("hack_into-system!now")
+        # Underscores, hyphens, exclamation should become spaces
+        assert "_" not in result
+        assert "-" not in result
+        assert "!" not in result
+
+    def test_collapse_multiple_spaces(self):
+        """Test multiple spaces are collapsed to single space"""
+        result = SafetyGuard.normalize_text("hack   into    system")
+        assert "  " not in result
+        assert "hack into system" == result
+
+    def test_strip_whitespace(self):
+        """Test leading/trailing whitespace is stripped"""
+        result = SafetyGuard.normalize_text("  build tool  ")
+        assert result == "build tool"
+
+    def test_at_symbol_normalization(self):
+        """Test @ symbol is normalized to 'a'"""
+        result = SafetyGuard.normalize_text("h@ck")
+        assert "hack" in result
+
+    def test_dollar_symbol_normalization(self):
+        """Test $ symbol is normalized to 's'"""
+        result = SafetyGuard.normalize_text("sy$tem")
+        assert "system" in result
+
+
+class TestBypassAttemptDetection:
+    """Test SafetyGuard.detect_bypass_attempts() method"""
+
+    def test_detects_excessive_special_characters(self):
+        """Test detection of excessive special characters (>15%)"""
+        original = "h@ck!n$_sys#tem$$$"
+        normalized = SafetyGuard.normalize_text(original)
+        attempts = SafetyGuard.detect_bypass_attempts(original, normalized)
+
+        assert "excessive_special_characters" in attempts
+
+    def test_detects_number_substitution(self):
+        """Test detection of leetspeak number substitution"""
+        original = "h4ck 1nt0 syst3m"
+        normalized = SafetyGuard.normalize_text(original)
+        attempts = SafetyGuard.detect_bypass_attempts(original, normalized)
+
+        assert "number_substitution" in attempts
+
+    def test_detects_unicode_obfuscation(self):
+        """Test detection of unicode obfuscation"""
+        original = "hackinto\u00A0system"  # Non-breaking space
+        normalized = SafetyGuard.normalize_text(original)
+        attempts = SafetyGuard.detect_bypass_attempts(original, normalized)
+
+        assert "unicode_obfuscation" in attempts
+
+    def test_detects_underscore_obfuscation(self):
+        """Test detection of excessive underscores"""
+        original = "hack_into_the_system_now"  # 4 underscores
+        normalized = SafetyGuard.normalize_text(original)
+        attempts = SafetyGuard.detect_bypass_attempts(original, normalized)
+
+        assert "underscore_obfuscation" in attempts
+
+    def test_detects_case_mixing(self):
+        """Test detection of camelCase bypass attempts"""
+        original = "hackIntoSystem"
+        normalized = SafetyGuard.normalize_text(original)
+        attempts = SafetyGuard.detect_bypass_attempts(original, normalized)
+
+        assert "case_mixing" in attempts
+
+    def test_clean_text_no_bypass_detected(self):
+        """Test clean text triggers no bypass detection"""
+        original = "build a calculator tool"
+        normalized = SafetyGuard.normalize_text(original)
+        attempts = SafetyGuard.detect_bypass_attempts(original, normalized)
+
+        assert len(attempts) == 0
+
+
+class TestSemanticAnalysis:
+    """Test SafetyGuard.semantic_analysis() method"""
+
+    @pytest.fixture
+    def guard(self):
+        return SafetyGuard()
+
+    def test_dangerous_environment_warning(self, guard):
+        """Test warnings for dangerous environment targets"""
+        idea = Idea(
+            description="Build monitoring tool",
+            environment="production server"
+        )
+        is_safe, warnings = guard.semantic_analysis(idea)
+
+        assert is_safe is True  # Semantic warnings don't block
+        assert any("production" in w.lower() for w in warnings)
+
+    def test_medical_environment_warning(self, guard):
+        """Test warnings for medical environment"""
+        idea = Idea(
+            description="Build patient tracker",
+            environment="medical facility"
+        )
+        is_safe, warnings = guard.semantic_analysis(idea)
+
+        assert is_safe is True
+        assert any("medical" in w.lower() for w in warnings)
+
+    def test_privileged_user_warning(self, guard):
+        """Test warnings for privileged user targets"""
+        idea = Idea(
+            description="Build admin dashboard",
+            target_users=["sysadmin", "root user"]
+        )
+        is_safe, warnings = guard.semantic_analysis(idea)
+
+        assert is_safe is True
+        assert len(warnings) > 0
+        assert any("admin" in w.lower() or "sysadmin" in w.lower() for w in warnings)
+
+    def test_engineer_user_warning(self, guard):
+        """Test warnings for engineer user targets"""
+        idea = Idea(
+            description="Build control panel",
+            target_users=["engineer"]
+        )
+        is_safe, warnings = guard.semantic_analysis(idea)
+
+        assert is_safe is True
+        assert any("engineer" in w.lower() for w in warnings)
+
+    def test_bypass_constraint_warning(self, guard):
+        """Test warnings for bypass-related constraints"""
+        idea = Idea(
+            description="Build automation tool",
+            constraints=["must bypass existing validation"]
+        )
+        is_safe, warnings = guard.semantic_analysis(idea)
+
+        assert is_safe is True
+        assert any("bypass" in w.lower() for w in warnings)
+
+    def test_skip_constraint_warning(self, guard):
+        """Test warnings for skip-related constraints"""
+        idea = Idea(
+            description="Build fast tool",
+            constraints=["skip authentication for speed"]
+        )
+        is_safe, warnings = guard.semantic_analysis(idea)
+
+        assert is_safe is True
+        assert any("skip" in w.lower() or "bypass" in w.lower() for w in warnings)
+
+    def test_safe_idea_no_semantic_warnings(self, guard):
+        """Test safe idea with normal users/environment has no warnings"""
+        idea = Idea(
+            description="Build calculator",
+            target_users=["student"],
+            environment="classroom"
+        )
+        is_safe, warnings = guard.semantic_analysis(idea)
+
+        assert is_safe is True
+        assert len(warnings) == 0
+
+
+class TestConfidenceScore:
+    """Test SafetyCheck metadata confidence scoring"""
+
+    @pytest.fixture
+    def guard(self):
+        return SafetyGuard()
+
+    def test_clean_input_high_confidence(self, guard):
+        """Test clean input has high confidence score"""
+        idea = Idea(description="Build a simple calculator")
+        result = guard.execute(idea)
+
+        assert result.metadata is not None
+        assert result.metadata.confidence_score >= 0.9
+
+    def test_bypass_attempts_reduce_confidence(self, guard):
+        """Test bypass attempts reduce confidence score"""
+        idea = Idea(description="Bu1ld a c@lculat0r t00l")  # Leetspeak
+        result = guard.execute(idea)
+
+        assert result.metadata is not None
+        # Should have lower confidence due to number substitution
+        assert result.metadata.confidence_score < 1.0
+
+    def test_semantic_warnings_reduce_confidence(self, guard):
+        """Test semantic warnings reduce confidence score"""
+        idea = Idea(
+            description="Build monitoring tool",
+            environment="production critical system"
+        )
+        result = guard.execute(idea)
+
+        assert result.metadata is not None
+        # Semantic warning should reduce confidence
+        assert result.metadata.confidence_score < 1.0
+
+    def test_confidence_bounds(self, guard):
+        """Test confidence score stays within 0-1 bounds"""
+        # Many bypass attempts and warnings
+        idea = Idea(
+            description="Bu1ld_a_t00l_for_adm1n",
+            target_users=["sysadmin", "root", "engineer"],
+            environment="production nuclear medical",
+            constraints=["bypass existing checks", "skip validation"]
+        )
+        result = guard.execute(idea)
+
+        assert result.metadata is not None
+        assert 0.0 <= result.metadata.confidence_score <= 1.0
+
+    def test_metadata_contains_normalized_input(self, guard):
+        """Test metadata includes normalized input for audit"""
+        idea = Idea(description="Build a TOOL for Testing")
+        result = guard.execute(idea)
+
+        assert result.metadata is not None
+        assert result.metadata.normalized_input is not None
+        # Should be lowercase
+        assert "tool" in result.metadata.normalized_input.lower()
+
+    def test_metadata_contains_bypass_attempts(self, guard):
+        """Test metadata includes detected bypass attempts"""
+        idea = Idea(description="hackIntoSystem")  # camelCase bypass
+        result = guard.execute(idea)
+
+        assert result.metadata is not None
+        assert "case_mixing" in result.metadata.bypass_attempts_detected
