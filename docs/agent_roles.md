@@ -40,20 +40,36 @@ ProjectSpec(
 
 **Key Responsibilities**:
 - Create folder structure
-- Generate code files based on spec
+- Generate code files based on spec using templates
 - Follow language conventions and best practices
 - Add helpful comments and docstrings
-- Create configuration files (pyproject.toml, requirements.txt, etc.)
+- Create configuration files (pyproject.toml, .gitignore, etc.)
 
-**Current Approach**: Template-based code generation
-**Future**: LLM-powered intelligent code generation
+**Implementation**: Template-based code generation using Jinja2
+**Components**:
+- `TemplateEngine` - Renders Jinja2 templates with project context
+- `CodeWriter` - Safely writes files with transaction support
+
+**Supported Project Types**:
+- **CLI Applications** - typer-based command-line tools
+- **Python Libraries** - Reusable packages with core classes
+- **Data Processing Tools** - pandas-based data processors
 
 **Code Generation Strategy**:
-1. Start with project skeleton (setup files, main entry point)
-2. Create core modules based on tasks
-3. Add error handling and logging
-4. Include inline documentation
-5. Ensure all imports and dependencies are correct
+1. Build context from ProjectSpec (name, dependencies, tech stack)
+2. Render templates for project type (CLI, library, or both)
+3. Generate common files (README, pyproject.toml, .gitignore)
+4. Generate domain-specific files (data_processor.py for data tools)
+5. Generate test files with appropriate test structure
+6. Validate generated files for completeness
+
+**Template Features**:
+- Conditional generation based on tech stack
+- Feature-based code generation
+- Fallback templates when custom templates unavailable
+- Unicode and special character support
+
+For detailed information, see [Code Generation Documentation](code_generation.md)
 
 ---
 
