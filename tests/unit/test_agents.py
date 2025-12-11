@@ -589,7 +589,9 @@ class TestTesterAgent:
         assert "test" in tester.description.lower()
 
     def test_tester_accepts_test_input(self):
-        """Test TesterAgent accepts TestInput"""
+        """Test TesterAgent accepts TestInput and returns TestGenerationOutput"""
+        from code_factory.agents.tester import TestGenerationOutput
+        
         tester = TesterAgent()
         spec = ProjectSpec(
             name="test",
@@ -604,10 +606,13 @@ class TestTesterAgent:
         )
         result = tester.execute(test_input)
 
-        assert isinstance(result, TestResult)
+        assert isinstance(result, TestGenerationOutput)
+        assert isinstance(result.test_result, TestResult)
 
-    def test_tester_returns_test_result(self):
-        """Test TesterAgent returns TestResult"""
+    def test_tester_returns_test_generation_output(self):
+        """Test TesterAgent returns TestGenerationOutput with test files and results"""
+        from code_factory.agents.tester import TestGenerationOutput
+        
         tester = TesterAgent()
         spec = ProjectSpec(
             name="test",
@@ -619,14 +624,20 @@ class TestTesterAgent:
         test_input = TestInput(spec=spec, code_files={})
         result = tester.execute(test_input)
 
-        assert isinstance(result, TestResult)
-        assert hasattr(result, "total_tests")
-        assert hasattr(result, "passed")
-        assert hasattr(result, "failed")
-        assert hasattr(result, "coverage_percent")
+        assert isinstance(result, TestGenerationOutput)
+        assert hasattr(result, "test_files")
+        assert hasattr(result, "test_result")
+        assert isinstance(result.test_files, dict)
+        assert isinstance(result.test_result, TestResult)
+        assert hasattr(result.test_result, "total_tests")
+        assert hasattr(result.test_result, "passed")
+        assert hasattr(result.test_result, "failed")
+        assert hasattr(result.test_result, "coverage_percent")
 
     def test_tester_result_has_valid_counts(self):
         """Test that test result has valid counts"""
+        from code_factory.agents.tester import TestGenerationOutput
+        
         tester = TesterAgent()
         spec = ProjectSpec(
             name="test",
@@ -638,9 +649,10 @@ class TestTesterAgent:
         test_input = TestInput(spec=spec, code_files={})
         result = tester.execute(test_input)
 
-        assert result.total_tests >= 0
-        assert result.passed >= 0
-        assert result.failed >= 0
+        assert isinstance(result, TestGenerationOutput)
+        assert result.test_result.total_tests >= 0
+        assert result.test_result.passed >= 0
+        assert result.test_result.failed >= 0
 
 
 class TestDocWriterAgent:
@@ -808,6 +820,73 @@ class TestGitOpsAgent:
         result = git_ops.execute(operation)
 
         assert result.operation == "push"
+
+
+class TestTesterAgentAdvanced:
+    """Additional tests for TesterAgent functionality"""
+
+    def test_tester_generates_test_files(self):
+        """Test that TesterAgent generates test files for code"""
+        from code_factory.agents.tester import TestGenerationOutput
+        
+        tester = TesterAgent()
+        spec = ProjectSpec(
+            name="calculator",
+            description="A simple calculator",
+            tech_stack={"language": "python"},
+            folder_structure={"src/": ["calculator.py"]},
+            entry_point="src/calculator.py"
+        )
+        code_files = {
+            "src/calculator.py": '''
+def add(a, b):
+    """Add two numbers"""
+    return a + b
+
+def subtract(a, b):
+    """Subtract two numbers"""
+    return a - b
+
+class Calculator:
+    def __init__(self):
+        self.history = []
+    
+    def calculate(self, a, b, op):
+        return op(a, b)
+'''
+        }
+        test_input = TestInput(spec=spec, code_files=code_files)
+        result = tester.execute(test_input)
+
+        # Should generate test files
+        assert len(result.test_files) > 0
+        # Should have pytest.ini
+        assert "pytest.ini" in result.test_files
+        # Should have conftest.py
+        assert "tests/conftest.py" in result.test_files
+        # Test count should be > 0
+        assert result.test_result.total_tests > 0
+
+    def test_tester_skips_non_testable_files(self):
+        """Test that TesterAgent skips __init__.py and test files"""
+        tester = TesterAgent()
+        spec = ProjectSpec(
+            name="test-project",
+            description="Test",
+            tech_stack={},
+            folder_structure={},
+            entry_point="main.py"
+        )
+        code_files = {
+            "__init__.py": "",
+            "test_existing.py": "def test_foo(): pass",
+            "conftest.py": "import pytest",
+        }
+        test_input = TestInput(spec=spec, code_files=code_files)
+        result = tester.execute(test_input)
+
+        # Should only have pytest.ini (no tests for these files)
+        assert "pytest.ini" in result.test_files
 
 
 class TestAgentInterfaces:
