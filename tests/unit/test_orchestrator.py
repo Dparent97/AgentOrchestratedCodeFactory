@@ -16,8 +16,12 @@ from pathlib import Path
 import pytest
 
 from code_factory.agents.architect import ArchitectAgent
+from code_factory.agents.doc_writer import DocWriterAgent
+from code_factory.agents.git_ops import GitOpsAgent
+from code_factory.agents.implementer import ImplementerAgent
 from code_factory.agents.planner import PlannerAgent
 from code_factory.agents.safety_guard import SafetyGuard
+from code_factory.agents.tester import TesterAgent
 from code_factory.core.agent_runtime import AgentRuntime
 from code_factory.core.models import Idea, ProjectResult
 from code_factory.core.orchestrator import Orchestrator
@@ -144,20 +148,35 @@ class TestFactoryRun:
         assert result.duration_seconds is not None
         assert result.duration_seconds >= 0
 
-    def test_run_factory_with_registered_agents(self):
-        """Test factory run with registered agents"""
+    def test_run_factory_with_registered_agents(self, isolated_test_config):
+        """Test factory run with all registered agents executes full pipeline"""
+        from code_factory.core.config import FactoryConfig
+        
         runtime = AgentRuntime()
+        # Register all pipeline agents
         runtime.register_agent(SafetyGuard())
         runtime.register_agent(PlannerAgent())
         runtime.register_agent(ArchitectAgent())
+        runtime.register_agent(ImplementerAgent())
+        runtime.register_agent(TesterAgent())
+        runtime.register_agent(DocWriterAgent())
+        runtime.register_agent(GitOpsAgent())
 
-        orchestrator = Orchestrator(runtime)
-        idea = Idea(description="Build a maintenance tracker")
-        result = orchestrator.run_factory(idea)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = FactoryConfig(
+                projects_dir=tmpdir,
+                checkpoint_dir=Path(tmpdir) / "checkpoints",
+                staging_dir=Path(tmpdir) / "staging",
+            )
+            orchestrator = Orchestrator(runtime, config=config)
+            idea = Idea(description="Build a maintenance tracker")
+            result = orchestrator.run_factory(idea)
 
-        assert isinstance(result, ProjectResult)
-        # Currently returns success=True with placeholder
-        assert result.success is True
+            assert isinstance(result, ProjectResult)
+            # With all agents registered, pipeline should complete successfully
+            assert result.success is True
+            assert result.project_name != ""
+            assert len(result.agent_runs) >= 7  # All stages executed
 
     def test_run_factory_handles_exceptions(self):
         """Test that factory run handles exceptions gracefully"""
