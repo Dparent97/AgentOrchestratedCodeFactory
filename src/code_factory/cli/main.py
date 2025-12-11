@@ -5,11 +5,13 @@ Provides commands to initialize, check status, and run the factory.
 """
 
 import sys
+import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 # Add parent directory to path for imports
@@ -18,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from code_factory import __version__
 from code_factory.core.agent_runtime import AgentRuntime
 from code_factory.core.config import get_config, load_config
+from code_factory.core.models import Idea
 from code_factory.core.orchestrator import Orchestrator
 from code_factory.agents.planner import PlannerAgent
 from code_factory.agents.architect import ArchitectAgent
@@ -169,6 +172,121 @@ def status():
 def version():
     """Show version information"""
     console.print(f"Code Factory version {__version__}")
+
+
+@app.command()
+def generate(
+    description: str = typer.Argument(..., help="Project description - what to build"),
+    output_dir: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Output directory for the generated project"
+    ),
+    features: Optional[List[str]] = typer.Option(
+        None, "--feature", "-f", help="Features to include (can be repeated)"
+    ),
+    target_users: Optional[List[str]] = typer.Option(
+        None, "--target-user", "-t", help="Target user roles (can be repeated)"
+    ),
+    environment: Optional[str] = typer.Option(
+        None, "--env", "-e", help="Target environment (e.g., 'offline', 'low-bandwidth')"
+    ),
+):
+    """
+    Generate a project from a description
+    
+    Transform your idea into a complete project with code, tests, and documentation.
+    
+    Examples:
+        code-factory generate "CLI tool to manage docker containers"
+        code-factory generate "REST API for inventory" -f "authentication" -f "pagination"
+        code-factory generate "mobile checklist app" -t "field engineer" -e "offline"
+    """
+    console.print()
+    console.print(
+        Panel(
+            f"[bold]{description}[/bold]",
+            title="🏭 Code Factory",
+            subtitle="Transforming idea into project",
+        )
+    )
+    console.print()
+
+    # Create the Idea from CLI arguments
+    idea = Idea(
+        description=description,
+        features=features or [],
+        target_users=target_users or [],
+        environment=environment,
+    )
+
+    # Initialize runtime and orchestrator
+    runtime = get_runtime()
+    config = get_config()
+    
+    # Override output directory if specified
+    if output_dir:
+        config.projects_dir = output_dir
+    
+    orchestrator = Orchestrator(runtime=runtime, config=config)
+
+    # Run the factory with progress display
+    start_time = time.time()
+    
+    with console.status("[bold blue]Generating project...[/bold blue]", spinner="dots"):
+        try:
+            result = orchestrator.run_factory(idea)
+        except Exception as e:
+            console.print(f"\n[bold red]✗ Error:[/bold red] {e}")
+            raise typer.Exit(1)
+
+    elapsed = time.time() - start_time
+
+    # Display results
+    console.print()
+    if result.success:
+        console.print("[bold green]✓ Project generated successfully![/bold green]\n")
+        
+        # Summary table
+        table = Table(title="Generation Summary", show_header=False, box=None)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value")
+        
+        table.add_row("Project Name", result.project_name)
+        if result.project_path:
+            table.add_row("Location", result.project_path)
+        table.add_row("Time", f"{elapsed:.1f}s")
+        table.add_row("Agents Run", str(len(result.agent_runs)))
+        if result.git_repo_url:
+            table.add_row("Repository", result.git_repo_url)
+        
+        console.print(table)
+        console.print()
+        
+        # Show agent execution summary if any
+        if result.agent_runs:
+            console.print("[bold cyan]Pipeline Stages:[/bold cyan]")
+            for run in result.agent_runs:
+                status_icon = "✓" if run.status == "success" else "✗" if run.status == "failed" else "○"
+                status_color = "green" if run.status == "success" else "red" if run.status == "failed" else "yellow"
+                duration = f" ({run.duration_seconds:.1f}s)" if run.duration_seconds else ""
+                console.print(f"  [{status_color}]{status_icon}[/{status_color}] {run.agent_name}{duration}")
+            console.print()
+        
+        # Next steps
+        if result.project_path:
+            console.print("[bold]Next steps:[/bold]")
+            console.print(f"  cd {result.project_path}")
+            console.print("  # Review generated code and tests")
+            console.print()
+    else:
+        console.print("[bold red]✗ Project generation failed[/bold red]\n")
+        
+        if result.errors:
+            console.print("[bold red]Errors:[/bold red]")
+            for error in result.errors:
+                console.print(f"  • {error}")
+            console.print()
+        
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
